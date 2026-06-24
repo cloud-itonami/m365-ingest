@@ -1,0 +1,241 @@
+{
+  "@context": "https://etzhayyim.com/ns/actor/v1",
+  "@id": "did:web:m365-ingest.etzhayyim.com",
+  "name": "m365-ingest",
+  "nanoid": "m3650xin",
+  "runtime": "k8s-langserver",
+  "edge": "sveltekit-proxy",
+  "legacyExecutionTier": "T1",
+  "performerType": "service",
+  "displayName": "M365 Ingest — Tenant Mailbox Collector",
+  "description": "Microsoft Graph API (client credentials flow) → kyber.inbox.emailSignal pipeline. Pulls every @etzhayyim.co.jp mailbox, routes to kyber-inbox (signal/noise) and yabai (threat scoring) via downstream subscribers. No UI, no OAuth — pure tenant-app ingest.",
+  "heartbeatRequired": true,
+  "uiType": "none",
+  "domainKnowledgeRequired": false,
+  "standardRule": "per-did-kyumei-shinka-autonomy@2026-04-13",
+  "standardStatus": "required",
+  "governance": {
+    "classification": "restricted",
+    "complianceFrameworks": [
+      "PII-Tier3",
+      "GDPR-Art6",
+      "ADR-0014"
+    ],
+    "raci": "responsible",
+    "purpose": "security:BEC-detection + compliance:audit + internal:knowledge-extraction",
+    "piiTier": 3,
+    "retentionDays": 2555,
+    "consentRequired": true,
+    "consentNsid": "com.etzhayyim.apps.consent.grant"
+  },
+  "actors": [
+    {
+      "path": "tenant:etzhayyim",
+      "displayName": "Etzhayyim Tenant Ingest",
+      "description": "Single tenant app binding (e9b32269-81a5-4d3a-bf94-048ba6770c99, Etzhayyim Japan)"
+    }
+  ],
+  "capabilities": [
+    "graph.query",
+    "graph.write",
+    "host.m365.acquireAppToken",
+    "host.m365.enumerateUsers",
+    "host.m365.fetchMailFolders",
+    "host.m365.fetchMessagesPage"
+  ],
+  "profile": {
+    "agentType": "autonomous",
+    "capabilities": [
+      "email-ingest",
+      "tenant-enumeration",
+      "delta-sync"
+    ],
+    "description": "Pulls raw Microsoft 365 mailbox data and emits normalized kyber.inbox.emailSignal records. Downstream routing (signal/noise, yabai) is derived via subscribeRepos subscribers.",
+    "displayName": "M365 Ingest",
+    "isBot": true,
+    "operator": "etzhayyim.co.jp"
+  },
+  "requiredCollections": [
+    "com.etzhayyim.apps.standard.shinkaEvolution",
+    "com.etzhayyim.apps.standard.shinkaKnowledge"
+  ],
+  "requiredLoops": [
+    "shinka",
+    "koji",
+    "kyumei"
+  ],
+  "triggers": {
+    "subscribeRepos": {
+      "collections": []
+    }
+  },
+  "pipelines": [
+    {
+      "id": "enumerate-tenant-users",
+      "description": "Refresh vertex_m365_user from Graph /users (daily).",
+      "trigger": {
+        "type": "cron",
+        "cron": "0 3 * * *"
+      },
+      "steps": [
+        {
+          "id": "token",
+          "fn": "host.m365.acquireAppToken"
+        },
+        {
+          "id": "users",
+          "fn": "host.m365.enumerateUsers",
+          "args": {
+            "token": "$token.access_token",
+            "upnDomainSuffix": "@etzhayyim.co.jp",
+            "top": 999
+          }
+        },
+        {
+          "id": "upsert",
+          "fn": "graph.write",
+          "args": {
+            "sql": "INSERT INTO vertex_m365_user (vertex_id, rkey, repo, owner_did, upn, user_id, display_name, mail, account_enabled, upn_domain, first_seen_at, last_seen_at, created_at, created_date, sensitivity_ord, org_id, actor_id) SELECT concat('at://', $did, '/com.etzhayyim.apps.m365Ingest.user/', u.userPrincipalName), u.userPrincipalName, $did, $did, u.userPrincipalName, u.id, u.displayName, u.mail, u.accountEnabled, SUBSTRING(u.userPrincipalName FROM POSITION('@' IN u.userPrincipalName)), NOW()::VARCHAR, NOW()::VARCHAR, NOW()::VARCHAR, CURRENT_DATE, 300, 'etzhayyim', 't1:m365-ingest' FROM UNNEST($users.users::JSON[]) AS u",
+            "params": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": "delta-sync-all-users",
+      "description": "Per 15min delta sync across all tenant users. Iterates vertex_m365_user and runs syncUser for each (bounded concurrency in executor).",
+      "trigger": {
+        "type": "cron",
+        "cron": "*/15 * * * *"
+      },
+      "steps": [
+        {
+          "id": "users",
+          "fn": "graph.query",
+          "args": {
+            "sql": "SELECT upn, last_received_at FROM vertex_m365_user u LEFT JOIN vertex_m365_sync_state s ON s.upn = u.upn AND s.data_kind = 'email' WHERE u.account_enabled AND u.upn_domain = '@etzhayyim.co.jp' AND (s.throttle_until IS NULL OR s.throttle_until < NOW()::VARCHAR) ORDER BY s.last_sync_at ASC NULLS FIRST LIMIT 50"
+          }
+        },
+        {
+          "id": "token",
+          "fn": "host.m365.acquireAppToken"
+        },
+        {
+          "id": "fanout",
+          "fn": "iterate",
+          "args": {
+            "over": "$users.rows",
+            "as": "u",
+            "maxConcurrency": 4,
+            "do": [
+              {
+                "id": "sync",
+                "fn": "pipeline.call",
+                "args": {
+                  "pipelineId": "sync-single-user",
+                  "input": {
+                    "upn": "$u.upn",
+                    "since": "$u.last_received_at"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync-single-user",
+      "description": "Ingest one UPN's mailbox. Paginated via nextLink. Writes kyber.inbox.emailSignal records + updates watermark.",
+      "trigger": {
+        "type": "xrpc",
+        "nsid": "com.etzhayyim.apps.m365Ingest.syncUser"
+      },
+      "steps": [
+        {
+          "id": "token",
+          "fn": "host.m365.acquireAppToken"
+        },
+        {
+          "id": "folders",
+          "fn": "host.m365.fetchMailFolders",
+          "args": {
+            "token": "$token.access_token",
+            "upn": "$input.upn"
+          }
+        },
+        {
+          "id": "mark-running",
+          "fn": "graph.write",
+          "args": {
+            "sql": "INSERT INTO vertex_m365_sync_state (vertex_id, rkey, repo, owner_did, upn, data_kind, status, run_id, last_sync_at, created_at, updated_at, created_date, sensitivity_ord, org_id, actor_id) VALUES (concat('at://', $did, '/com.etzhayyim.apps.m365Ingest.syncState/', $input.upn, ':email'), concat($input.upn, ':email'), $did, $did, $input.upn, 'email', 'running', $runId, NOW()::VARCHAR, NOW()::VARCHAR, NOW()::VARCHAR, CURRENT_DATE, 300, 'etzhayyim', 't1:m365-ingest')"
+          }
+        },
+        {
+          "id": "paginate",
+          "fn": "loop",
+          "args": {
+            "while": "$next.nextLink != null || $iteration == 0",
+            "maxIterations": 500,
+            "do": [
+              {
+                "id": "page",
+                "fn": "host.m365.fetchMessagesPage",
+                "args": {
+                  "token": "$token.access_token",
+                  "upn": "$input.upn",
+                  "since": "$input.since",
+                  "top": 999,
+                  "nextLink": "$loop.prev.nextLink"
+                }
+              },
+              {
+                "id": "classify-and-write",
+                "fn": "pipeline.map",
+                "args": {
+                  "items": "$page.messages",
+                  "emit": {
+                    "collection": "com.etzhayyim.apps.kyber.inbox.emailSignal",
+                    "record": {
+                      "messageId": "${item.id}",
+                      "messageIdHash": "${hash(item.internetMessageId || item.id)}",
+                      "conversationId": "${item.conversationId}",
+                      "accountDid": "did:web:kyber.etzhayyim.com:user:${slug(input.upn.split('@')[0])}",
+                      "folderId": "${item.parentFolderId}",
+                      "folder": "${folders.map[item.parentFolderId] || 'inbox'}",
+                      "receivedAt": "${item.receivedDateTime}",
+                      "fromAddress": "${item.from.emailAddress.address}",
+                      "fromDomain": "${item.from.emailAddress.address.split('@')[1]}",
+                      "senderKind": "${classifySenderKind(item.from.emailAddress.address)}",
+                      "subjectEnc": "${signalEncrypt(item.subject)}",
+                      "subjectHash": "${hash(item.subject)}",
+                      "bodyPreviewEnc": "${signalEncrypt(item.bodyPreview)}",
+                      "importance": "${item.importance}",
+                      "isRead": "${item.isRead ? 1 : 0}",
+                      "hasAttachments": "${item.hasAttachments ? 1 : 0}",
+                      "signalClass": "${folderSignalClass(folders.map[item.parentFolderId])}",
+                      "noiseScore": "${noiseScore(item, folders.map[item.parentFolderId])}",
+                      "kyberDept": "inbox",
+                      "status": "active"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "watermark",
+          "fn": "graph.write",
+          "args": {
+            "sql": "UPDATE vertex_m365_sync_state SET last_sync_at = NOW()::VARCHAR, last_received_at = $paginate.maxReceivedAt, record_count = record_count + $paginate.totalInserted, status = 'idle', updated_at = NOW()::VARCHAR WHERE upn = $input.upn AND data_kind = 'email'"
+          }
+        }
+      ]
+    }
+  ],
+  "complianceDocs": [
+    "90-docs/260417-m365-ingest-workflow-design.md",
+    "90-docs/adr/0018-pii-tier3-cohort-first.md"
+  ]
+}
