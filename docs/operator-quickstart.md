@@ -76,8 +76,10 @@ cd <superproject root>
 nbb scripts/maturity-loop/run.cljs --only m365-ingest
 ```
 
-期待は `噛む=16 噛まない=0 エラー=0 skip=0`。使い捨て worktree を west の pin から
-切って 16 通りに壊すので、**共有 checkout には触れない**。`噛まない` が 1 つでも
+期待は `噛む=24 噛まない=0 エラー=0 skip=0`。使い捨て worktree を west の pin から
+切って 24 通りに壊すので、**共有 checkout には触れない**。うち 8 通りは
+**この文書と README と ADR を壊す** —— 手順・数・断り書きが実体から離れたら
+赤くなる（`test/m365_ingest/docs_test.cljs`）。`噛まない` が 1 つでも
 出たら、それは「そのテストはその不変条件を守っていない」という具体的な TODO である。
 
 ## 5. gate を手で撃ってみる（任意・5 秒）
