@@ -42,6 +42,29 @@
 (def claims    (edn/read-string (slurp* "docs/identity-claims.edn")))
 (def census    (:census claims))
 
+(defn- missing-phrases
+  "`text` に無い needle を返す。**`(is (str/includes? doc \"x\"))` と書かない**ための道具。
+
+   ## なぜ含有検査を直接書いてはいけないか
+
+   cljs.test は失敗時に式の引数をそのまま印字する。`str/includes?` に文書全体を
+   渡していると、**失敗メッセージに README / quickstart の全文が載る**。
+
+   この repo ではそれが検出器を壊す。README も quickstart も
+   『最後に `m365-ingest actor: all green` が出れば緑』と**期待出力を引用している**ので、
+   全文が印字された瞬間に緑マーカーが出力へ戻ってくる —— mutation runner
+   （`scripts/maturity-loop/run.cljs`）は緑マーカーの有無で噛んだかを判定するため、
+   **suite が赤いのに『噛まない＝この不変条件は誰も守っていない』と報告する**。
+
+   実測 2026-08-08: この形で 4 mutation が偽の『噛まない』になった
+   （`gate-census-pin-goes-stale` は前日まで噛んでいたのに、README を足した途端に
+   噛まなくなった）。**文書を検査する test は、文書を出力に出してはならない。**
+
+   needle の集合だけを返して `(is (= [] (missing-phrases ...)))` と書けば、失敗時に
+   出るのは足りない needle だけになり、読みやすさの点でも勝る。"
+  [text needles]
+  (vec (remove #(str/includes? text %) needles)))
+
 (def external-scripts
   "**この repo の外に在る**と宣言した script。quickstart はこれらを名指ししてよいが、
    実在検査からは外れる —— 代わりに『どこに在るのか』を人が明示する義務を負う。
@@ -84,7 +107,7 @@
    **注意の文言そのものを見る。** 単に文字列 `cloud-itonami` が現れるかを見ると、
    clone の URL に必ず出てくるので**注意書きを消しても緑のまま**になる
    （実測: 最初はそう書いていて、mutation を当てても噛まなかった）。"
-  (is (str/includes? quickstart "`origin` ではなく `cloud-itonami`")
+  (is (= [] (missing-phrases quickstart ["`origin` ではなく `cloud-itonami`"]))
       "remote 名の注意（origin ではない）が消えている"))
 
 ;; ── 2. 数が実体と合うこと ───────────────────────────────────────────────────
@@ -118,10 +141,9 @@
    3 者が同時に動かない限り赤くなる。"
   (is (= (count m/cell-specs) (:cell-count census)))
   (is (= (count m/common-gates) (:common-gate-count census)))
-  (is (str/includes? readme (str (:cell-count census) " cell"))
-      (str "README が cell 数 " (:cell-count census) " を言っていない"))
-  (is (str/includes? readme (str (:common-gate-count census) " gate"))
-      (str "README が gate 数 " (:common-gate-count census) " を言っていない")))
+  (is (= [] (missing-phrases readme [(str (:cell-count census) " cell")
+                                     (str (:common-gate-count census) " gate")]))
+      "README が census の cell 数 / gate 数を言っていない"))
 
 (deftest the-readme-names-both-dids-and-says-which-one-resolves
   "この repo の要点は『名乗る DID は解決せず、解決する DID は誰も名乗っていない』。
@@ -129,8 +151,8 @@
   (let [by-id (into {} (map (juxt :id identity)) (:claims claims))
         named    (get-in by-id [:did/substrate :did])
         resolving (get-in by-id [:did/committed :did])]
-    (is (str/includes? readme named) (str "README が " named " を書いていない"))
-    (is (str/includes? readme resolving) (str "README が " resolving " を書いていない"))
+    (is (= [] (missing-phrases readme [named resolving]))
+        "README が 2 つの DID の片方を書いていない")
     (is (= named m/actor-did) "substrate の actor-did が claims と割れている")))
 
 (deftest the-readme-states-that-the-lexicons-do-not-overlap
@@ -138,7 +160,7 @@
    README も直させる。"
   (is (zero? (:shared-collection-count (:lexicon claims)))
       "交差が生まれた。README の記述を測り直すこと")
-  (is (str/includes? readme "交差 0")))
+  (is (= [] (missing-phrases readme ["交差 0"]))))
 
 ;; ── 3. 境界の宣言が消えないこと ─────────────────────────────────────────────
 
@@ -148,19 +170,18 @@
    もう片方だけを読んだ人が `wrangler` を叩きに行く。両方で守る。"
   (doseq [[label text] [["README" readme] ["quickstart" quickstart]]]
     (testing label
-      (is (str/includes? text "CLAUDE.md")
+      (is (= [] (missing-phrases text ["CLAUDE.md"]))
           (str label " が CLAUDE.md に触れていない")))))
 
 (deftest the-quickstart-keeps-a-do-not-do-section
   "『やらないこと』は、この repo では飾りではない —— did.json を編集して直った
    ことにする / substrate を manifest 側に揃える、はどちらも実際に起こりうる
    誤りで、後者は mutation で撃ってある。節ごと消えないようにする。"
-  (is (str/includes? quickstart "やらないこと"))
-  (is (str/includes? quickstart "_meta.primaryLexicon")
-      "揃える向き（substrate 側が権威）の注意が消えている"))
+  (is (= [] (missing-phrases quickstart ["やらないこと" "_meta.primaryLexicon"]))
+      "節そのもの、または揃える向き（substrate 側が権威）の注意が消えている"))
 
 (deftest the-adr-is-accepted-and-the-readme-points-at-it
   "ADR が孤立していると、README だけ直して決定が置き去りになる。"
-  (is (str/includes? adr "**status**: accepted"))
-  (is (str/includes? readme "docs/adr/0001")
+  (is (= [] (missing-phrases adr ["**status**: accepted"])))
+  (is (= [] (missing-phrases readme ["docs/adr/0001"]))
       "README が ADR を指していない"))

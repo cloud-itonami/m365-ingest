@@ -28,7 +28,7 @@ nbb --classpath src:test run_tests.cljs
 期待される最後の 3 行:
 
 ```
-Ran 48 tests containing 234 assertions.
+Ran 48 tests containing 231 assertions.
 0 failures, 0 errors.
 
 mode: offline
@@ -58,7 +58,7 @@ m365-ingest actor: all green
 nbb --classpath src:test run_tests.cljs --network
 ```
 
-`Ran 48 tests containing 258 assertions.` / `mode: offline + network` になる
+`Ran 48 tests containing 255 assertions.` / `mode: offline + network` になる
 （増えた 24 assertion が実測ぶん）。curl で各 DID / 配信面を引き、
 `docs/identity-claims.edn` の `:measured` と突き合わせる。
 
