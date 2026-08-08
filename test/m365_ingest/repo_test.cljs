@@ -1,0 +1,250 @@
+(ns m365_ingest.repo-test
+  "descriptor 本体（actor-manifest.jsonld / .well-known/did.json / NOTICE /
+   MIGRATION-TODO.md）と、docs/identity-claims.edn に固定した測定値を突き合わせる。
+
+   ## なぜ fixture ではなく実ファイルを撃つのか
+
+   規則を守っているのが fixture だけなら、**実ファイルが壊れても緑のまま**に
+   なる。兄弟 repo `cloud-itonami/cargo` では実際にその状態が 2026-05 から
+   2026-08 まで続いていた —— actor-manifest.test.ts は `toHaveLength(8)` と
+   書かれたまま一度も実行されず、その間に pipeline は 10 本に増え、@id と
+   did.json の id は別々の DID に割れていた。どちらも報告されなかった。
+
+   だからここでは実ファイルを読み、**数を pin して両方向に落とす**。
+   pin が古くなったときの正しい対応は pin を戻すことではなく、
+   測り直して docs/identity-claims.edn を更新することである。"
+  (:require [clojure.edn :as edn]
+            [clojure.set :as set]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [m365_ingest.didweb :as didweb]
+            [m365_ingest.murakumo :as m]
+            ["node:fs" :as fs]))
+
+(defn- slurp* [path] (fs/readFileSync path "utf8"))
+(defn- json* [path] (js->clj (js/JSON.parse (slurp* path)) :keywordize-keys false))
+
+(def claims-doc (edn/read-string (slurp* "docs/identity-claims.edn")))
+(def manifest   (json* "actor-manifest.jsonld"))
+(def did-doc    (json* ".well-known/did.json"))
+(def notice     (slurp* "NOTICE"))
+(def todo       (slurp* "MIGRATION-TODO.md"))
+
+(def claims (:claims claims-doc))
+(def census (:census claims-doc))
+(def lexicon (:lexicon claims-doc))
+
+;; ── claims の自己整合 ───────────────────────────────────────────────────────
+
+(deftest every-claim-resolution-url-is-derived-not-hand-written
+  "`:resolves-to` を手で書くと、解決規則を 1 箇所間違えただけで『存在しない URL を
+   測って 404 だと報告する』—— 測定は動いて見えるので気づけない。
+   didweb の規則から導いた URL と一致することを確かめる。"
+  (doseq [{:keys [id did resolves-to]} claims]
+    (testing (str id)
+      (is (= (didweb/resolution-url did) resolves-to)
+          (str id " の :resolves-to が解決規則から導けない")))))
+
+(deftest no-claim-uses-percent-encoding
+  "didweb の解決規則は host のポート percent-encoding（did:web:localhost%3A8080）を
+   扱わない。扱わない前提を、前提のまま放置しないための番人。"
+  (doseq [{:keys [id did]} claims]
+    (testing (str id)
+      (is (not (str/includes? (str did) "%"))
+          "percent-encoding を含む claim が現れた。didweb の規則を拡張すること"))))
+
+(deftest every-identity-claim-names-the-value-its-source-file-actually-holds
+  "claims は『この repo が何を名乗っているか』の写しである。写しである以上、
+   **原本が動いたら赤くなる**必要がある。片側だけ直す修正をここで止める。"
+  (let [by-id (into {} (map (juxt :id identity)) claims)]
+    (is (= (get-in by-id [:did/substrate :did]) m/actor-did)
+        "substrate の actor-did が claims と違う")
+    (is (= (get-in by-id [:did/manifest :did]) (get manifest "@id"))
+        "manifest の @id が claims と違う")
+    (is (= (get-in by-id [:did/committed :did]) (get did-doc "id"))
+        "did.json の id が claims と違う")
+    (is (= (get-in by-id [:aka/at-handle :did]) (first (get did-doc "alsoKnownAs")))
+        "alsoKnownAs[0] が claims と違う")
+    (is (= (get-in by-id [:aka/source :did]) (second (get did-doc "alsoKnownAs")))
+        "alsoKnownAs[1] が claims と違う")
+    (is (= (get-in by-id [:aka/old-pages :did]) (nth (get did-doc "alsoKnownAs") 3))
+        "alsoKnownAs[3] が claims と違う")))
+
+;; ── identity の割れ ─────────────────────────────────────────────────────────
+
+(deftest the-substrate-and-the-manifest-agree-on-the-actor-did
+  "**この repo は兄弟 3 本で唯一、substrate と manifest が一致している。**
+   一致しているという事実自体を固定する —— 片方だけ動かす修正（一番起こりやすい
+   壊し方）をここで止めるため。なお一致先は DNS に存在しない（network-test が測る）。"
+  (is (= m/actor-did (get manifest "@id"))))
+
+(deftest the-did-document-names-a-different-did-than-the-manifest
+  "**これは『正しい』の固定ではなく、割れの固定である。**
+   .well-known/did.json だけが別の DID を名乗っており、しかもそれが唯一解決する。
+   揃った瞬間にもここは赤くなる —— そのときの正しい対応は元に戻すことではなく、
+   claims を測り直して更新すること。"
+  (is (not= (get did-doc "id") (get manifest "@id"))
+      "identity の割れが解消した。docs/identity-claims.edn を測り直して更新すること"))
+
+(deftest every-did-document-service-id-is-a-fragment-of-its-own-did
+  "service id が別の DID を指したまま残るのは、改名を半分だけやった形そのもの。
+   document 全体は妥当に見えるので、id を突き合わせない限り通る。"
+  (let [self (get did-doc "id")]
+    (doseq [svc (get did-doc "service")]
+      (testing (get svc "id")
+        (is (str/starts-with? (get svc "id") (str self "#"))
+            (str "service id が自分の DID の fragment でない: " (get svc "id")))))))
+
+;; ── census ──────────────────────────────────────────────────────────────────
+
+(deftest the-pinned-census-matches-the-manifest
+  "count を pin して**両方向に**落とす。cargo の toHaveLength(8) が 10 になって
+   いたのに誰も気づかなかった事故の再発防止がこの節の要。"
+  (is (= (:pipeline-count census) (count (get manifest "pipelines"))))
+  (is (= (:capability-count census) (count (get manifest "capabilities"))))
+  (is (= (:required-collection-count census) (count (get manifest "requiredCollections"))))
+  (is (= (:required-loop-count census) (count (get manifest "requiredLoops"))))
+  (is (= (:subscribed-collection-count census)
+         (count (get-in manifest ["triggers" "subscribeRepos" "collections"])))))
+
+(deftest the-pinned-gate-census-matches-the-substrate
+  "cell や baseline gate の数が動いたら測り直させる。とくに :common-gate-count が
+   **減る**のは gate が緩む方向の変更なので、気づかずに通ってはいけない。"
+  (is (= (:cell-count census) (count m/cell-specs)))
+  (is (= (:common-gate-count census) (count m/common-gates))))
+
+;; ── lexicon の割れ ──────────────────────────────────────────────────────────
+
+(defn- manifest-nsids []
+  (->> (re-seq #"com\.etzhayyim\.[A-Za-z0-9.-]+" (slurp* "actor-manifest.jsonld"))
+       distinct set))
+
+(defn- substrate-collections []
+  (->> (vals m/cell-specs) (mapcat :collections) set))
+
+(deftest the-substrate-and-the-manifest-share-no-collection-at-all
+  "**この repo で最も重い測定。** gate が書く先を descriptor 側の誰も宣言して
+   いない（交差 0）。pin を動かしたら赤くなり、その意味は『戻せ』ではなく
+   『測り直して claims を更新しろ』。"
+  (let [nsids (manifest-nsids)
+        subs  (substrate-collections)]
+    (is (= (:manifest-nsid-count lexicon) (count nsids)))
+    (is (= (:substrate-collection-count lexicon) (count subs)))
+    (is (= (:shared-collection-count lexicon)
+           (count (set/intersection nsids subs))))))
+
+(deftest the-substrate-prefix-is-the-one-the-live-authority-declares
+  "**揃える先を間違えないための番人。** live DID document の _meta.primaryLexicon が
+   com.etzhayyim.m365-ingest を名乗っており、これは substrate の prefix と一致する。
+   素朴に『substrate を manifest（com.etzhayyim.apps.m365Ingest.*）に合わせる』と、
+   一見 3 つ割れが解消したように見えて**権威から遠ざかる**。"
+  (is (= (:substrate-prefix lexicon) (:authority-primary-lexicon lexicon))
+      "substrate の prefix が live authority の primaryLexicon と違う")
+  (doseq [c (substrate-collections)]
+    (is (str/starts-with? c (str (:authority-primary-lexicon lexicon) "."))
+        (str "substrate が権威の lexicon 外に書いている: " c))))
+
+;; ── manifest の内部整合 ─────────────────────────────────────────────────────
+
+(defn- all-steps
+  "pipeline の step を再帰的に集める。iterate / loop の :do にネストした step は
+   浅い walk では見えない —— そこに宣言外の capability が隠れる。"
+  [node]
+  (cond
+    (map? node)        (concat (when (get node "fn") [node])
+                               (mapcat all-steps (vals node)))
+    (sequential? node) (mapcat all-steps node)
+    :else              nil))
+
+(def control-flow-fns
+  "executor の制御構文。capability ではないので grant を要求しない。"
+  #{"iterate" "loop" "pipeline.call" "pipeline.map"})
+
+(deftest every-step-declares-a-capability-the-manifest-grants
+  "deny-by-default の workspace で『宣言にない権限で動く actor』を作らせない。
+   capabilities から 1 つ落としても、それを呼ぶ step は残る —— その半端な失効を
+   ここで止める。"
+  (let [granted (set (get manifest "capabilities"))]
+    (doseq [step (all-steps (get manifest "pipelines"))]
+      (let [f (get step "fn")]
+        (when-not (control-flow-fns f)
+          (testing (str (get step "id") " → " f)
+            (is (contains? granted f)
+                (str "宣言にない capability を呼んでいる: " f))))))))
+
+(deftest every-granted-capability-is-actually-called
+  "逆向き。使われない grant は **過剰付与**で、最小権限から静かに離れる。"
+  (let [called (->> (all-steps (get manifest "pipelines"))
+                    (map #(get % "fn"))
+                    (remove control-flow-fns)
+                    set)]
+    (doseq [c (get manifest "capabilities")]
+      (testing c
+        (is (contains? called c) (str "宣言したが一度も呼ばれない capability: " c))))))
+
+(deftest every-cron-trigger-has-five-fields
+  "3 / 4 / 6 フィールドの cron は、host によって黙って別の時刻に走る（秒付き
+   6 フィールドと取り違える）。落ちずにズレるので、動いているように見えたまま
+   別の時刻に走る。"
+  (doseq [p (get manifest "pipelines")]
+    (when-let [cron (get-in p ["trigger" "cron"])]
+      (testing (str (get p "id") " → " cron)
+        (is (= 5 (count (str/split (str/trim cron) #"\s+")))
+            (str "cron のフィールド数が 5 でない: " cron))))))
+
+(deftest every-pipeline-and-loop-has-a-matching-cell-in-the-substrate
+  "manifest の pipeline / requiredLoops / requiredCollections から導かれる cell が
+   substrate 側に在ること。**表と宣言がずれたら、gate を通らない経路ができる。**"
+  (let [cells (set (map name (keys m/cell-specs)))]
+    (doseq [p (get manifest "pipelines")]
+      (testing (str "pipeline " (get p "id"))
+        (is (contains? cells (get p "id"))
+            (str "pipeline に対応する cell が無い: " (get p "id")))))
+    (doseq [l (get manifest "requiredLoops")]
+      (testing (str "loop " l)
+        (is (contains? cells l) (str "requiredLoop に対応する cell が無い: " l))))))
+
+;; ── 固定した gap ────────────────────────────────────────────────────────────
+
+(deftest the-pinned-gaps-still-describe-the-code
+  "`:gaps` は『測って、直していない』ものの記録。直ったらここが赤くなり、
+   『記録を更新しろ』と言う —— 直したこと自体は良いことなので、赤は
+   『戻せ』ではなく『反映しろ』の意味である。"
+  (let [by-id (into {} (map (juxt :id identity)) (:gaps claims-doc))]
+    (testing ":rkey/reserved-passthrough"
+      (let [g (get-in by-id [:rkey/reserved-passthrough :measured])]
+        (is (= (:dot g) (m/safe-rkey ".")))
+        (is (= (:dotdot g) (m/safe-rkey "..")))))
+
+    (testing ":record/caller-can-forge-actor-did"
+      (let [g (get-in by-id [:record/caller-can-forge-actor-did :measured])
+            plan (m/cell-plan :shinka
+                              {:attestations (into #{} m/common-gates)
+                               :request-id "req-1"
+                               :record {:actorDid (:record-actor-did-when-caller-supplies-one g)
+                                        :constitutionalStatus (:record-constitutional-status-when-caller-supplies-one g)}})
+            eff (first (:effects plan))]
+        (is (= (:effect-actor g) (:actor eff))
+            "effect の帰属まで動くようになった —— これは gap ではなく事故")
+        (is (= (:record-actor-did-when-caller-supplies-one g)
+               (:actorDid (:record eff)))
+            "record の :actorDid が上書きできなくなった。:gaps を更新すること")))
+
+    (testing ":migration/todo-unstarted"
+      (let [g (get-in by-id [:migration/todo-unstarted :measured])]
+        (is (= (:unchecked g) (count (re-seq #"- \[ \]" todo))))
+        (is (= (:checked g) (count (re-seq #"- \[x\]" todo))))))
+
+    (testing ":manifest/dangling-docs"
+      (let [g (get-in by-id [:manifest/dangling-docs :measured])
+            referenced (concat (get manifest "complianceDocs") ["CHARTER-RIDER.md"])
+            present (filter #(fs/existsSync %) referenced)]
+        (is (= (:referenced g) (count referenced)))
+        (is (= (:present g) (count present))
+            "参照先が現れた。:gaps を更新すること")))))
+
+(deftest the-notice-names-the-rider-it-requires
+  "NOTICE は『Rider も受け入れたことになる』と述べる。その Rider を名指しする
+   文言が消えたら、受け入れ対象が不明になる。"
+  (is (str/includes? notice "CHARTER-RIDER.md"))
+  (is (str/includes? notice "Apache License 2.0")))

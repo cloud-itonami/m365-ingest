@@ -1,0 +1,211 @@
+;; docs/identity-claims.edn — この repo が名乗る identity claim と、その **実測**。
+;;
+;; なぜ EDN で持つか: README に散文で「A は解決するが B はしない」と書くと、
+;; 直った瞬間・悪化した瞬間の両方で README が黙って嘘になる。ここに測定値を
+;; 固定して test に突き合わせさせると、**どちらに動いても赤くなる**
+;; （直ったら「doc を更新せよ」と言って落ちる）。
+;;
+;; 手編集してよい唯一のタイミングは「実際に測り直して、記述も直したとき」。
+;;
+;; :measured の :http は curl の HTTP status。0 は「接続そのものが失敗」
+;; （DNS 不在・TLS 不成立）であって 0 件・空応答ではない。
+;;
+;; 兄弟 repo `cloud-itonami/cargo` / `handotai-actor` / `jp-ashiba-actor` の同名
+;; ファイルと同じ形にしてある。**ただし測定値は repo ごとに違う。** この repo の
+;; 形は 3 兄弟のどれとも違い、最も重い:
+;;
+;;   cargo        commit した did.json の id が解決しない
+;;   jp-ashiba    id は解決するが、解決先の中身が commit したものと違う
+;;   **m365-ingest  substrate と manifest が一致しており、その一致した DID が
+;;                  DNS に存在しない**（下記 :did/substrate と :did/manifest）
+;;
+;; 一致しているぶん「揃っている」ように見えるが、揃っている先が無い。
+
+{:measured-at "2026-08-08"
+ :measured-how "curl -sL --max-time 15 -o /dev/null -w '%{http_code}'"
+
+ ;; ── identity ──────────────────────────────────────────────────────────────
+ ;; この actor は 3 つの名前で名乗られている。**解決するのは 1 つだけ**で、
+ ;; それは .well-known/did.json が名乗っているもの ——
+ ;; **そして .well-known/did.json は、どこにも publish されていない**
+ ;; （この repo の GitHub Pages は無効。下記 :publication）。
+ :claims
+ [{:id          :did/substrate
+   :source      "src/m365_ingest/murakumo.cljc → actor-did"
+   :did         "did:web:m365-ingest.etzhayyim.com"
+   ;; did:web 解決規則（W3C did:web）: method-specific id の ':' を '/' にして
+   ;; https:// を付ける。path 成分が無い場合だけ /.well-known/ を挟む。
+   :resolves-to "https://m365-ingest.etzhayyim.com/.well-known/did.json"
+   :measured    {:http 0}
+   :note        "**gate が発行する全 effect の :actor がこの値である。**
+                 ホストは DNS に存在しない（NXDOMAIN。apex の etzhayyim.com は
+                 解決するのでゾーンごと消えたのではなく、この label が無い）。
+                 つまり emit される record は全て、**誰にも解決できない DID** に
+                 帰属している。actor ごとにサブドメインを配る設計だった名残で、
+                 実際に配られたのは did:web:etzhayyim.com:actor:<name> の方だった。"}
+
+  {:id          :did/manifest
+   :source      "actor-manifest.jsonld → @id"
+   :did         "did:web:m365-ingest.etzhayyim.com"
+   :resolves-to "https://m365-ingest.etzhayyim.com/.well-known/did.json"
+   :measured    {:http 0}
+   :note        "substrate と **一致する**（兄弟 3 repo で唯一）。ただし一致先が
+                 存在しないので、これは整合ではなく『同じ方向に揃って外している』。
+                 片方だけ直すと三つ割れになるため、どちらを動かすにも両方を動かす
+                 必要がある —— mutation :m365-ingest/manifest-id-drifts-from-claims
+                 がその半端な修正を止める。"}
+
+  {:id          :did/committed
+   :source      ".well-known/did.json → id"
+   :did         "did:web:etzhayyim.com:actor:m365-ingest"
+   :resolves-to "https://etzhayyim.com/actor/m365-ingest/did.json"
+   :measured    {:http 200 :serves-committed-bytes? false}
+   :note        "**この repo で唯一解決する DID。しかし repo のどのコードもこれを
+                 名乗っていない**（substrate も manifest も別の DID を持つ）。
+                 さらに解決先は commit した document ではない。
+                 生きている側（etzhayyim.com が発行）と commit 側の差:
+                   - service#atproto_pds: live=https://pds.aozora.app（200）
+                     / commit=https://pds.etzhayyim.com（530）
+                   - alsoKnownAs: live=[] / commit=4 件
+                   - @context の suite: live=jws-2020 / commit=ed25519-2020
+                   - live にだけ #xrpc-libp2p service と _meta がある
+                 commit 側は**死んだ endpoint を指している**ので、この document を
+                 信じた resolver は到達できない PDS に行く。
+                 **どちらを正とするかはこの repo が決められない**（live document を
+                 発行しているのは etzhayyim.com 側）。ここでは測定値の固定に留める。"}
+
+  {:id          :aka/at-handle
+   :source      ".well-known/did.json → alsoKnownAs[0]"
+   :did         "at://m365-ingest.etzhayyim.com"
+   :resolves-to "https://m365-ingest.etzhayyim.com/.well-known/atproto-did"
+   :measured    {:http 0}
+   :note        "AT Protocol handle。:did/substrate と同じ不在ホストを指す。"}
+
+  {:id          :aka/source
+   :source      ".well-known/did.json → alsoKnownAs[1]"
+   :did         "https://github.com/etzhayyim/com-etzhayyim-m365-ingest"
+   :resolves-to "https://github.com/etzhayyim/com-etzhayyim-m365-ingest"
+   :measured    {:http 200}
+   :note        "移行元。現在の正本は cloud-itonami/m365-ingest なので、
+                 alsoKnownAs が指す source は 1 世代古い。到達はする。"}
+
+  {:id          :aka/old-pages
+   :source      ".well-known/did.json → alsoKnownAs[3]"
+   :did         "did:web:etzhayyim.github.io:com-etzhayyim-m365-ingest"
+   :resolves-to "https://etzhayyim.github.io/com-etzhayyim-m365-ingest/did.json"
+   :measured    {:http 404}
+   :note        "旧 Pages 配信。移行時に落ちたまま alsoKnownAs に残っている。"}]
+
+ ;; ── publication ───────────────────────────────────────────────────────────
+ ;; commit した did.json が実際に配信されているか。**これが兄弟 repo との
+ ;; 一番の違い**: cargo は Pages 有効で committed bytes を配信しているが、
+ ;; ここは jp-ashiba と同じく Pages が無効で、commit した document は
+ ;; どこからも取得できない。.nojekyll だけが置かれている（Pages を意図した
+ ;; 痕跡はあるが、有効化されていない）。
+ :publication
+ {:github-pages-enabled? false
+  :note                  "commit した .well-known/did.json は publish されていない。
+                          『did.json を repo に置いた』ことと『DID が解決する』ことは
+                          別である —— ここではその 2 つが繋がっていない。
+                          測定は :surfaces の :pages が持つ。"}
+
+ ;; ── surfaces（配信面）────────────────────────────────────────────────────
+ ;; 兄弟 repo の同名 file と同じキー名にしてある（network-test が同じ形で回す）。
+ :surfaces
+ [{:id :pages :url "https://cloud-itonami.github.io/m365-ingest/.well-known/did.json"
+   :measured {:http 404}
+   :source "GitHub Pages（無効）"
+   :note "commit した did.json の配信先になるはずだった URL。Pages が無効なので 404。"}
+  {:id :pds/committed :url "https://pds.etzhayyim.com" :measured {:http 530}
+   :source ".well-known/did.json → service[#atproto_pds]"
+   :note "Cloudflare 1033（tunnel 不在）。commit 側の document が指す PDS。
+          xrpc/com.atproto.server.describeServer も 530。"}
+  {:id :pds/live :url "https://pds.aozora.app" :measured {:http 404}
+   :source "live DID document → service[#atproto_pds]"
+   :note "root は 404 だが describeServer は 200 —— PDS として生きている。
+          root の 404 を『死んでいる』と読まないこと（:pds/live-describe が測る）。"}
+  {:id :pds/live-describe :url "https://pds.aozora.app/xrpc/com.atproto.server.describeServer"
+   :measured {:http 200}
+   :source "live DID document → service[#atproto_pds] の health"
+   :note "live 側が本当に PDS として応答することの根拠。"}
+  {:id :appview :url "https://aozora.app" :measured {:http 200}
+   :source ".well-known/did.json → service[#aozora]"}
+  {:id :context :url "https://etzhayyim.com/ns/actor/v1" :measured {:http 404}
+   :source "actor-manifest.jsonld → @context"
+   :note "JSON-LD context が解決しない。manifest を JSON-LD として処理する
+          consumer は term を展開できない（JSON として読む限り実害は出ないので
+          気づかれないまま残っている）。"}]
+
+ ;; ── census（数を固定する）────────────────────────────────────────────────
+ ;; 兄弟 repo cargo に置かれていた actor-manifest.test.ts は toHaveLength(8) と
+ ;; 書いたまま **一度も走らず**、実際の pipeline は 10 本に増えていた。
+ ;; count を pin して**両方向に**落とすのがこの節の要。
+ :census
+ {:cell-count               9
+  :common-gate-count        7
+  :pipeline-count           3
+  :capability-count         6
+  :required-collection-count 2
+  :required-loop-count      3
+  :subscribed-collection-count 0}
+
+ ;; ── lexicon ───────────────────────────────────────────────────────────────
+ ;; gate が書く先と、descriptor が宣言する先が **1 つも重ならない**。
+ :lexicon
+ {:substrate-prefix          "com.etzhayyim.m365-ingest"
+  :substrate-collection-count 9
+  :manifest-nsid-count       7
+  :shared-collection-count   0
+  :authority-primary-lexicon "com.etzhayyim.m365-ingest"
+  :note "**揃える先は substrate 側である。** live DID document の
+         _meta.primaryLexicon が com.etzhayyim.m365-ingest を名乗っており、
+         これは substrate の prefix と一致する。manifest 側の
+         com.etzhayyim.apps.m365Ingest.* / com.etzhayyim.apps.standard.* が
+         権威から離れている。素朴に『substrate を manifest に合わせる』と
+         **権威から遠ざかる** —— mutation
+         :m365-ingest/substrate-lexicon-aligned-to-the-manifest がその向き
+         違いを止める。
+         なお manifest は actor 名を m365Ingest と m365-ingest の 2 通りで綴る
+         （NSID 側は camelCase、@id と name は kebab-case）。"}
+
+ ;; ── gaps（測って固定しただけ。直していない）──────────────────────────────
+ ;; ここに挙げたものは **意図的に修正していない**。axis-test の反復で gate の
+ ;; 挙動を同時に変えると、テストが「今の挙動」を測っているのか「変えた後の
+ ;; 挙動」を測っているのか区別できなくなるため。直したら該当 deftest が赤くなり
+ ;; 『測り直して claims を更新しろ』と言う。
+ :gaps
+ [{:id :rkey/reserved-passthrough
+   :where "src/m365_ingest/murakumo.cljc → safe-rkey"
+   :what "AT Protocol が予約する rkey `.` と `..` を素通しする。
+          安全文字集合に `.` が入っているため、`.` は `.` のまま残る。"
+   :measured {:dot "." :dotdot ".."}}
+
+  {:id :record/caller-can-forge-actor-did
+   :where "src/m365_ingest/murakumo.cljc → records-for"
+   :what "**effect の :actor は actor-did に固定されるが、record 本体の
+          :actorDid は呼び出し側が上書きできる。** base map が入力 record より
+          先に merge されるため、入力に :actorDid があればそれが勝つ。
+          :constitutionalStatus \"attested-plan\" も同様に上書きできる ——
+          gate を通っていない主張を、gate の出力の中に置ける。"
+   :measured {:effect-actor "did:web:m365-ingest.etzhayyim.com"
+              :record-actor-did-when-caller-supplies-one "did:web:someone-else.example"
+              :record-constitutional-status-when-caller-supplies-one "forged"}}
+
+  {:id :ns/underscore
+   :where "src/m365_ingest/murakumo.cljc → ns 宣言"
+   :what "ns 名が `m365_ingest.murakumo` とアンダースコアで書かれている
+          （慣用形は `m365-ingest.murakumo`、ファイル経路だけが underscore）。
+          path が偶然一致するので load は通る。兄弟 jp-ashiba-actor も同形なので
+          この repo 単独では直さない。"}
+
+  {:id :manifest/dangling-docs
+   :where "actor-manifest.jsonld → complianceDocs / NOTICE"
+   :what "complianceDocs が指す 2 ファイルと NOTICE が指す CHARTER-RIDER.md は
+          この repo に存在しない。参照先が別 repo なのか未移行なのかは不明。"
+   :measured {:present 0 :referenced 3}}
+
+  {:id :migration/todo-unstarted
+   :where "MIGRATION-TODO.md"
+   :what "2026-05-21 の TRANSFORM 以来 6 項目すべて未チェック。
+          `[ ]` の数を固定して、進んだら（あるいは黙って消されたら）赤くする。"
+   :measured {:unchecked 6 :checked 0}}]}
