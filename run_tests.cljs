@@ -19,6 +19,7 @@
   (:require [clojure.test :as t]
             [m365_ingest.gate-test]
             [m365_ingest.repo-test]
+            [m365_ingest.docs-test]
             [m365_ingest.network-test :as network]))
 
 (def green-marker
@@ -35,4 +36,5 @@
 
 (t/run-tests 'm365_ingest.gate-test
              'm365_ingest.repo-test
+             'm365_ingest.docs-test
              'm365_ingest.network-test)

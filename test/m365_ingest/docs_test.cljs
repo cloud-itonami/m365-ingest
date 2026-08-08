@@ -1,0 +1,162 @@
+(ns m365_ingest.docs-test
+  "README.md / docs/operator-quickstart.md が、**今の repo について本当のことを
+   言っているか**を突き合わせる。
+
+   ## なぜ散文を test するのか
+
+   この repo の docs は既に『測って固定する』形で書かれている ——
+   `docs/identity-claims.edn` に測定値を置き、repo-test / network-test が
+   両方向に落ちる。**しかし README と quickstart はその外に居た。**
+   EDN が更新されても README の散文は黙って古くなれるし、逆に quickstart が
+   存在しない script を指しても誰も気づかない。
+
+   兄弟 repo `cloud-itonami/cargo` の事故（`toHaveLength(8)` と書かれた検査が
+   一度も走らないまま pipeline が 10 本に増えた）は、`.ts` の検査でも `.md` の
+   散文でも同じ形で起きる。**走らない検査と、確かめられない手順は同じもの**である。
+
+   ## ここが守る 3 つ
+
+   1. **手順が踏めること** — quickstart が名指しする `.cljs` は実在するか、
+      repo の外にあると**明示的に宣言**されているかのどちらか。書いただけの
+      コマンドを置けなくする（skill itonami-maturity-improve の axis-docs gate:
+      『踏めない手順は書かない』の機械化）。
+   2. **数が実体と合うこと** — README / quickstart が引用する cell 数・gate 数・
+      deftest 数は、実体および `docs/identity-claims.edn` の census と一致する。
+      **両方向に落ちる**（増えても減っても赤）。
+   3. **境界の宣言が消えないこと** — 『CLAUDE.md はここに無い実行系の説明であり、
+      その手順を実行しない』という断り書きは、この repo で最も高くつく誤読を
+      止めている。黙って外せないようにする。
+
+   赤くなったときの意味は『戻せ』ではなく『文書を実体に合わせろ』である。"
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [m365_ingest.murakumo :as m]
+            ["node:fs" :as fs]))
+
+(defn- slurp* [path] (fs/readFileSync path "utf8"))
+
+(def readme    (slurp* "README.md"))
+(def quickstart (slurp* "docs/operator-quickstart.md"))
+(def adr       (slurp* "docs/adr/0001-descriptor-and-gate-not-an-executor.md"))
+(def claims    (edn/read-string (slurp* "docs/identity-claims.edn")))
+(def census    (:census claims))
+
+(def external-scripts
+  "**この repo の外に在る**と宣言した script。quickstart はこれらを名指ししてよいが、
+   実在検査からは外れる —— 代わりに『どこに在るのか』を人が明示する義務を負う。
+   増やすときは、その step が superproject 側であることを quickstart 本文でも
+   言うこと（`cd <superproject root>` のような文脈なしに置かない）。"
+  #{"scripts/maturity-loop/run.cljs"})
+
+;; ── 1. 手順が踏めること ─────────────────────────────────────────────────────
+
+(defn- referenced-scripts
+  "文書が名指しする `.cljs` path。`nbb --classpath src:test run_tests.cljs` のような
+   行から拾う。裸の語も拾うので、拡張子を持つ token だけを見る。"
+  [text]
+  (->> (re-seq #"[A-Za-z0-9_./-]+\.cljs" text)
+       distinct
+       (remove #(str/starts-with? % "test/"))   ; ns 名の説明で出てくる自分自身
+       set))
+
+(deftest every-script-the-quickstart-names-either-exists-or-is-declared-external
+  "**『踏めない手順は書かない』の機械化。** 存在しない script を指す quickstart は、
+   読んだ人が実行して初めて壊れていることが分かる —— 文書としては最後まで
+   もっともらしく読める。ここで先に落とす。"
+  (doseq [s (referenced-scripts quickstart)]
+    (testing s
+      (is (or (fs/existsSync s) (contains? external-scripts s))
+          (str s " が実在せず、external-scripts にも宣言されていない")))))
+
+(deftest every-classpath-directory-the-quickstart-names-exists
+  "`--classpath src:test` の各要素。`src` を消して `test` だけにする、のような
+   変更が quickstart を黙って壊す。"
+  (doseq [cp (map second (re-seq #"--classpath\s+([A-Za-z0-9_.:/-]+)" quickstart))
+          dir (str/split cp #":")]
+    (testing dir
+      (is (fs/existsSync dir) (str "classpath の " dir " が無い")))))
+
+(deftest the-quickstart-names-the-remote-this-repo-actually-has
+  "west 経由の checkout は remote 名が `origin` ではない。`git fetch origin` を
+   書いてある quickstart は、その 1 行で止まる。"
+  (is (str/includes? quickstart "cloud-itonami")
+      "remote 名の注意（origin ではない）が消えている"))
+
+;; ── 2. 数が実体と合うこと ───────────────────────────────────────────────────
+
+(defn- deftest-count
+  "test/ 配下の deftest 総数。quickstart が書く `Ran N tests` の N はこれと一致する。
+
+   **行頭に錨を打つ。** `#\"\\(deftest \"` だと docstring や、この関数自身が持つ
+   正規表現リテラルまで数えてしまう —— 実測で 1 件多く数えて赤くなった
+   （数える道具が自分を数える形は、静かにずれるので気づきにくい）。"
+  []
+  (->> (fs/readdirSync "test/m365_ingest")
+       (filter #(re-find #"\.clj[cs]$" %))
+       (map #(str "test/m365_ingest/" %))
+       (map slurp*)
+       (map #(count (re-seq #"(?m)^\(deftest " %)))
+       (reduce + 0)))
+
+(deftest the-quickstart-quotes-the-number-of-tests-that-actually-exist
+  "**両方向に落ちる。** test を足しても消しても『期待される出力』が古くなるので、
+   そのとき quickstart を直させる。cargo の toHaveLength(8) を散文側で再発
+   させないための番人。"
+  (let [quoted (some-> (re-find #"Ran (\d+) tests" quickstart) second js/parseInt)]
+    (is (some? quoted) "quickstart が `Ran N tests` を引用していない")
+    (is (= (deftest-count) quoted)
+        (str "quickstart は " quoted " tests と書いているが、実体は "
+             (deftest-count) " 個の deftest がある"))))
+
+(deftest the-readme-quotes-the-gate-and-cell-counts-that-the-substrate-has
+  "README の『9 cell × 7 gate』は substrate の実体でもあり census の pin でもある。
+   3 者が同時に動かない限り赤くなる。"
+  (is (= (count m/cell-specs) (:cell-count census)))
+  (is (= (count m/common-gates) (:common-gate-count census)))
+  (is (str/includes? readme (str (:cell-count census) " cell"))
+      (str "README が cell 数 " (:cell-count census) " を言っていない"))
+  (is (str/includes? readme (str (:common-gate-count census) " gate"))
+      (str "README が gate 数 " (:common-gate-count census) " を言っていない")))
+
+(deftest the-readme-names-both-dids-and-says-which-one-resolves
+  "この repo の要点は『名乗る DID は解決せず、解決する DID は誰も名乗っていない』。
+   片方だけ書いた README は、割れを 1 つ隠す。"
+  (let [by-id (into {} (map (juxt :id identity)) (:claims claims))
+        named    (get-in by-id [:did/substrate :did])
+        resolving (get-in by-id [:did/committed :did])]
+    (is (str/includes? readme named) (str "README が " named " を書いていない"))
+    (is (str/includes? readme resolving) (str "README が " resolving " を書いていない"))
+    (is (= named m/actor-did) "substrate の actor-did が claims と割れている")))
+
+(deftest the-readme-states-that-the-lexicons-do-not-overlap
+  "交差 0 はこの repo で最も重い測定で、README の主張の中核。census が動いたら
+   README も直させる。"
+  (is (zero? (:shared-collection-count (:lexicon claims)))
+      "交差が生まれた。README の記述を測り直すこと")
+  (is (str/includes? readme "交差 0")))
+
+;; ── 3. 境界の宣言が消えないこと ─────────────────────────────────────────────
+
+(deftest the-readme-and-the-quickstart-both-say-claude-md-describes-code-that-is-absent
+  "**この repo で最も高くつく誤読を止めている 1 文。** CLAUDE.md は T1 実行系を
+   詳細に書いており、実装が在るように読める。断り書きが片方から消えると、
+   もう片方だけを読んだ人が `wrangler` を叩きに行く。両方で守る。"
+  (doseq [[label text] [["README" readme] ["quickstart" quickstart]]]
+    (testing label
+      (is (str/includes? text "CLAUDE.md")
+          (str label " が CLAUDE.md に触れていない")))))
+
+(deftest the-quickstart-keeps-a-do-not-do-section
+  "『やらないこと』は、この repo では飾りではない —— did.json を編集して直った
+   ことにする / substrate を manifest 側に揃える、はどちらも実際に起こりうる
+   誤りで、後者は mutation で撃ってある。節ごと消えないようにする。"
+  (is (str/includes? quickstart "やらないこと"))
+  (is (str/includes? quickstart "_meta.primaryLexicon")
+      "揃える向き（substrate 側が権威）の注意が消えている"))
+
+(deftest the-adr-is-accepted-and-the-readme-points-at-it
+  "ADR が孤立していると、README だけ直して決定が置き去りになる。"
+  (is (str/includes? adr "**status**: accepted"))
+  (is (str/includes? readme "docs/adr/0001")
+      "README が ADR を指していない"))
