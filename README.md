@@ -39,7 +39,7 @@ nbb --classpath src:test run_tests.cljs             # 構造・gate・固定値�
 nbb --classpath src:test run_tests.cljs --network   # 上記 + 名乗りを実際に解決しに行く
 ```
 
-どちらも 48 tests、`--network` 無しで 234 assertions・有りで 258 assertions。最後に
+どちらも 48 tests、`--network` 無しで 231 assertions・有りで 255 assertions。最後に
 `m365-ingest actor: all green` が出れば緑。手順は
 [docs/operator-quickstart.md](docs/operator-quickstart.md)。
 
