@@ -77,10 +77,14 @@
     (testing dir
       (is (fs/existsSync dir) (str "classpath の " dir " が無い")))))
 
-(deftest the-quickstart-names-the-remote-this-repo-actually-has
+(deftest the-quickstart-warns-that-the-remote-is-not-called-origin
   "west 経由の checkout は remote 名が `origin` ではない。`git fetch origin` を
-   書いてある quickstart は、その 1 行で止まる。"
-  (is (str/includes? quickstart "cloud-itonami")
+   書いてある quickstart は、その 1 行で止まる。
+
+   **注意の文言そのものを見る。** 単に文字列 `cloud-itonami` が現れるかを見ると、
+   clone の URL に必ず出てくるので**注意書きを消しても緑のまま**になる
+   （実測: 最初はそう書いていて、mutation を当てても噛まなかった）。"
+  (is (str/includes? quickstart "`origin` ではなく `cloud-itonami`")
       "remote 名の注意（origin ではない）が消えている"))
 
 ;; ── 2. 数が実体と合うこと ───────────────────────────────────────────────────
