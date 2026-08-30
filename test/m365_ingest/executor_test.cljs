@@ -1,0 +1,212 @@
+(ns m365_ingest.executor-test
+  "executor（source / graph / run）の検査。
+
+   docs/adr/0001 は『ここには収集そのものが無い』と書いていた。2026-08-30 に
+   executor が入ったので、その ADR の主張は変わる —— **変わらないのは gate が
+   先であること**で、ここはそれを両方向から撃つ。
+
+   network は要らない。Graph の応答は値として渡すので、確かめられるのは
+   『どの request を組んだか』『その応答をどう読んだか』であり、どちらも
+   ただの値の比較である。"
+  (:require [clojure.test :refer [deftest is testing]]
+            [importer.cursor :as cursor]
+            [importer.model :as im]
+            [importer.plan :as plan]
+            [m365_ingest.graph :as graph]
+            [m365_ingest.murakumo :as m]
+            [m365_ingest.run :as run]
+            [m365_ingest.source :as source]
+            ["node:fs" :as fs]))
+
+(def manifest (js->clj (js/JSON.parse (fs/readFileSync "actor-manifest.jsonld" "utf8"))))
+
+(def open-gates (set m/common-gates))
+(def c0 (source/mail-cursor "jun@etzhayyim.co.jp" "inbox"))
+
+(defn- ok [body] {:connector.http/status 200 :connector.http/body body})
+
+(def a-message
+  {"id" "AAMkAGI2" "internetMessageId" "<CAF123@mail.example.com>"
+   "conversationId" "conv-1" "subject" "Re: quote"
+   "receivedDateTime" "2026-08-30T01:02:03Z"
+   "from" {"emailAddress" {"address" "Buyer@example.com" "name" "A Buyer"}}
+   "toRecipients" [{"emailAddress" {"address" "jun@etzhayyim.co.jp"}}]
+   "bodyPreview" "about the quote"})
+
+;; ── source ────────────────────────────────────────────────────────────────
+
+(deftest the-source-declares-its-terms
+  (is (im/valid? source/source) (pr-str (im/errors source/source)))
+  (is (= [:folders :mail] (im/stream-kinds source/source))))
+
+(deftest governance-agrees-with-the-actor-manifest
+  "PII tier と retention は manifest にも書いてある。**2 箇所に書いたなら
+   突き合わせる** —— この repo は identity でまさにその割れを踏んでいる。"
+  (let [g (get manifest "governance")]
+    (is (= (get g "piiTier") (:importer.governance/pii-tier source/governance)))
+    (is (= (get g "retentionDays") (:importer.governance/retention-days source/governance)))
+    (is (= (get g "consentRequired") (:importer.governance/consent-required? source/governance)))
+    (is (= (get g "classification")
+           (name (:importer.governance/classification source/governance))))
+    (is (= (get g "purpose") (:importer.governance/purpose source/governance)))))
+
+(deftest the-mail-cursor-names-what-invalidates-it
+  "410 を計画された経路にしているのはこの宣言。消えたら model が別の理由で
+   赤くなるが、ここでも直接見る。"
+  (is (im/resyncs-on? source/source :mail :resync-required))
+  (is (= :unknown (im/history-retention source/source :mail))
+      "Graph は deltaLink の有効期限を公表していない。:unknown は測った答えで、書き忘れではない"))
+
+(deftest one-cursor-per-mailbox-and-folder
+  (is (not= (cursor/stream-key (source/mail-cursor "a@x" "inbox"))
+            (cursor/stream-key (source/mail-cursor "a@x" "archive")))
+      "Graph の delta は folder ごと。1 mailbox に 1 本にすると片方が読まれない"))
+
+;; ── graph ─────────────────────────────────────────────────────────────────
+
+(deftest a-delta-link-is-used-as-a-url-and-not-rebuilt
+  (let [c (assoc c0 :importer.cursor/token "https://graph.microsoft.com/v1.0/x?$deltatoken=ABC")]
+    (is (= {:connector.http/method :get
+            :connector.http/url "https://graph.microsoft.com/v1.0/x?$deltatoken=ABC"}
+           (graph/delta-request c {:mailbox "a@x" :folder-id "inbox"}))
+        "query を組み直すと $deltatoken が落ち、静かに全件読み直しになる"))
+  (is (= "https://graph.microsoft.com/v1.0/users/a@x/mailFolders/inbox/messages/delta"
+         (:connector.http/url (graph/delta-request c0 {:mailbox "a@x" :folder-id "inbox"})))))
+
+(deftest next-link-and-delta-link-are-not-the-same-token
+  (testing "nextLink means this run continues"
+    (let [{:keys [plan incremental-token]}
+          (graph/page c0 (ok {"value" [a-message] "@odata.nextLink" "https://g/next"}))]
+      (is (= "https://g/next" (:importer.plan/next-token plan)))
+      (is (nil? incremental-token))))
+  (testing "deltaLink means this run is over, and names where the next one starts"
+    (let [{:keys [plan incremental-token]}
+          (graph/page c0 (ok {"value" [a-message] "@odata.deltaLink" "https://g/delta"}))]
+      (is (nil? (:importer.plan/next-token plan))
+          "nil next-token is what marks the backfill exhausted")
+      (is (= "https://g/delta" incremental-token)))))
+
+(deftest removed-entries-are-tombstones-not-records
+  (let [{:keys [plan tombstones]}
+        (graph/page c0 (ok {"value" [a-message
+                                     {"id" "GONE" "@removed" {"reason" "deleted"}}]
+                            "@odata.deltaLink" "https://g/d"}))]
+    (is (= 1 (count (:importer.plan/items plan)))
+        "a deletion stored as a record leaves mail in the corpus that the tenant deleted")
+    (is (= [{:tombstone/provider-id "GONE" :tombstone/reason "deleted"}] tombstones)
+        "and a deletion dropped on the floor leaves retention unanswerable")))
+
+(deftest a-410-is-a-planned-resync-and-not-a-crash
+  (let [r (graph/page c0 {:connector.http/status 410
+                          :connector.http/body {"error" {"code" "resyncRequired"}}})]
+    (is (= :failed (:importer.plan/outcome (:plan r))))
+    (is (:importer.plan/resync-required? (:plan r)))))
+
+(deftest an-unreachable-graph-is-unmeasured-not-empty
+  (doseq [status [429 500 503 nil]]
+    (testing (str "status " status)
+      (let [r (graph/page c0 {:connector.http/status status :connector.http/body {}})]
+        (is (= :unmeasured (:importer.plan/outcome (:plan r)))
+            "throttled or down is not 'nothing new'")))))
+
+(deftest graph-messages-key-on-the-rfc-5322-id
+  (let [{:keys [plan]} (graph/page c0 (ok {"value" [a-message] "@odata.deltaLink" "d"}))
+        rec (first (:importer.plan/items plan))]
+    (is (= "rfc5322:CAF123@mail.example.com" (:mail/id rec))
+        "keying on Graph's own id doubles everyone who exists in both systems")
+    (is (= {:person/address "buyer@example.com" :person/name "A Buyer"} (:mail/from rec)))
+    (is (= 1788051723000 (:mail/at rec)))))
+
+;; ── run: the gate is first ────────────────────────────────────────────────
+
+(deftest a-blocked-gate-emits-nothing-and-is-unmeasured
+  (let [r (run/step {:cursor c0 :attestations {} :request-id "r1" :computed-at 1000
+                     :response (ok {"value" [a-message] "@odata.deltaLink" "d"})})]
+    (is (= :unmeasured (:outcome r)) "gate blocked is not 'synced zero'")
+    (is (= [] (:effects r)))
+    (is (= :blocked (:status (:gate r))))
+    (testing "and the cursor does not move"
+      (let [{:keys [importer/cursor importer/outcome]}
+            (run/land r c0 {:importer.sink/persisted 0} 1000)]
+        (is (= c0 cursor))
+        (is (= :unmeasured outcome))))))
+
+(deftest a-partial-attestation-is-still-blocked
+  (let [r (run/step {:cursor c0 :attestations (disj open-gates :no-probing-baseline)
+                     :request-id "r1" :computed-at 1000
+                     :response (ok {"value" [a-message] "@odata.deltaLink" "d"})})]
+    (is (= :unmeasured (:outcome r)))
+    (is (= [] (:effects r)))))
+
+(deftest an-open-gate-emits-one-effect-per-message
+  (let [r (run/step {:cursor c0 :attestations open-gates :request-id "r1" :computed-at 1000
+                     :response (ok {"value" [a-message] "@odata.deltaLink" "d"})})]
+    (is (= :synced (:outcome r)))
+    (is (= 1 (count (:effects r))))
+    (is (= :mst/put-record (:op (first (:effects r)))))
+    (is (= run/collection (:collection (first (:effects r)))))))
+
+(deftest an-imported-message-cannot-forge-the-actor
+  "gap :record/caller-can-forge-actor-did は `records-for` の話だが、取り込みは
+   **外から届いた JSON** を record にするので、同じ穴がここでは遠隔から踏める。
+   canonical record を :imported の下に 1 段落とすことで構造的に塞いである。"
+  (let [hostile (assoc a-message
+                       "actorDid" "did:web:someone-else.example"
+                       "constitutionalStatus" "forged"
+                       "$type" "com.attacker.thing")
+        r (run/step {:cursor c0 :attestations open-gates :request-id "r1" :computed-at 1000
+                     :response (ok {"value" [hostile] "@odata.deltaLink" "d"})})
+        record (:record (first (:effects r)))]
+    (is (= m/actor-did (:actor (first (:effects r))))
+        "effect の actor は put-record-effect が固定する")
+    (is (= "did:web:someone-else.example" (get hostile "actorDid"))
+        "（対照）敵対値は確かに入力に在った")
+    (is (not= "did:web:someone-else.example" (:actorDid record)))
+    (is (not= "forged" (:constitutionalStatus record)))
+    (is (= [] (run/envelope-problems record))
+        "封筒が予約 key を top level に持っていない")
+    (is (contains? record :imported) "取り込んだ内容は 1 段下に在る")))
+
+;; ── run: persist, then move ───────────────────────────────────────────────
+
+(defn- page-of [n link]
+  (ok (merge {"value" (mapv #(assoc a-message
+                                    "id" (str "id" %)
+                                    "internetMessageId" (str "<m" % "@x.com>"))
+                            (range n))}
+             link)))
+
+(deftest a-page-the-sink-half-took-does-not-move-the-cursor
+  (let [r (run/step {:cursor c0 :attestations open-gates :request-id "r" :computed-at 1
+                     :response (page-of 3 {"@odata.nextLink" "https://g/2"})})
+        {:keys [importer/cursor importer/outcome importer/receipt]}
+        (run/land r c0 {:importer.sink/persisted 1} 1)]
+    (is (= :failed outcome))
+    (is (= c0 cursor) "re-read the page rather than strand two messages forever")
+    (is (= :partial-write (:importer.receipt/held-reason receipt)))))
+
+(deftest the-backfill-must-finish-before-the-delta-is-followed
+  (let [mid (run/step {:cursor c0 :attestations open-gates :request-id "r" :computed-at 1
+                       :response (page-of 2 {"@odata.nextLink" "https://g/2"})})
+        c1 (:importer/cursor (run/land mid c0 {:importer.sink/persisted 2} 1))]
+    (is (cursor/started? c1))
+    (is (not (cursor/exhausted? c1)))
+    (testing "promoting here would skip everything not yet paged"
+      (is (= :held (:importer.cursor/state (cursor/promote c1 "https://g/delta" 2)))))
+    (let [fin (run/step {:cursor c1 :attestations open-gates :request-id "r" :computed-at 2
+                         :response (page-of 1 {"@odata.deltaLink" "https://g/delta"})})
+          c2 (:importer/cursor (run/land fin c1 {:importer.sink/persisted 1} 2))
+          promoted (cursor/promote c2 (:incremental-token fin) 2)]
+      (is (cursor/exhausted? c2))
+      (is (= :promoted (:importer.cursor/state promoted)))
+      (is (= :incremental (cursor/phase (:importer.cursor/cursor promoted))))
+      (is (= "https://g/delta" (cursor/token (:importer.cursor/cursor promoted)))))))
+
+(deftest a-resync-returns-to-backfill-and-says-why
+  (let [r (run/step {:cursor c0 :attestations open-gates :request-id "r" :computed-at 1
+                     :response {:connector.http/status 410
+                                :connector.http/body {"error" {"code" "resyncRequired"}}}})]
+    (is (run/resync-needed? r))
+    (let [c (run/after-resync c0 5)]
+      (is (= :backfill (cursor/phase c)))
+      (is (= 1 (count (:importer.cursor/resets c)))))))

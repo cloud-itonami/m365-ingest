@@ -13,11 +13,19 @@
 |---|---|
 | actor が**何を名乗り、何を要求し、どの pipeline を持つと宣言しているか** | **ある**（`actor-manifest.jsonld` / `.well-known/did.json`） |
 | **gate**（attestation が揃わなければ effect を 1 つも出さない判断） | **ある**（`src/m365_ingest/murakumo.cljc`、130 行） |
-| Microsoft Graph を叩くコード・OAuth・Worker・cron の実行主体 | **無い** |
+| **Graph の delta 応答を canonical record に翻訳し、gate を通して effect を並べる executor** | **ある**（2026-08-30 追加。`src/m365_ingest/{source,graph,run}.cljc`） |
+| OAuth・token 取得・HTTP を送る主体・Worker・cron・sink | **無い** |
 
-**ここには動くサービスは無い。** `cell-plan` が返すのは「書くとしたら何をどこに書くか」
-という**計画**であって、書き込みそのものではない。`:effects` は
-`{:op :mst/put-record ...}` という data であり、それを実行する者はこの repo に居ない。
+**ここには動くサービスは無い。** 2026-08-30 に executor が入ったが、それが返すのも
+やはり **effect の列**である —— `run/step` は Graph の応答を受け取って
+`{:op :mst/put-record ...}` を並べるところまでで、HTTP を送る者も、token を持つ者も、
+書き込む者もこの repo に居ない。credential に到達する経路が 1 本も無いので、
+**この repo の review に「鍵を漏らしていないか」という項目は要らない。**
+
+executor が足したのは判断ではなく順序である: `run/step` が effect を返し、
+`run/land` が **sink 自身が書いた件数**を受けて初めて cursor を動かす。1 本の関数に
+すると「書く前に cursor を進める」が書けてしまい、それは次の delta が二度と触れない
+恒久的で静かな穴になる（`kotoba-lang/importer` の `cursor/advance` が拒む形）。
 
 ## `CLAUDE.md` はここに無いものを説明している
 
@@ -35,11 +43,11 @@ descriptor だけを写した snapshot で、codemod は未着手（`MIGRATION-T
 散文ではなく実行で確かめられる。
 
 ```bash
-nbb --classpath src:test run_tests.cljs             # 構造・gate・固定値（network 不要）
-nbb --classpath src:test run_tests.cljs --network   # 上記 + 名乗りを実際に解決しに行く
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs             # 構造・gate・executor・固定値（network 不要）
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs --network   # 上記 + 名乗りを実際に解決しに行く
 ```
 
-どちらも 48 tests、`--network` 無しで 231 assertions・有りで 255 assertions。最後に
+どちらも 65 tests、`--network` 無しで 292 assertions・有りで 316 assertions。最後に
 `m365-ingest actor: all green` が出れば緑。手順は
 [docs/operator-quickstart.md](docs/operator-quickstart.md)。
 
@@ -52,11 +60,14 @@ README が赤くなる。quickstart が名指しする `.cljs` の実在も同�
 
 | ファイル | 役割 |
 |---|---|
-| `src/m365_ingest/murakumo.cljc` | **この repo で唯一 substrate と呼べるもの。** 9 cell × 7 gate の deny-by-default 判断 |
+| `src/m365_ingest/murakumo.cljc` | **判断はここだけ。** 9 cell × 7 gate の deny-by-default |
+| `src/m365_ingest/source.cljc` | 何を追うかの宣言（cursor の種類・失効条件・governance）。`importer.model` が検査する |
+| `src/m365_ingest/graph.cljc` | Graph の応答 → provider に依らない page。純関数、credential 無し |
+| `src/m365_ingest/run.cljc` | gate → effect（`step`）と、sink の報告 → cursor（`land`）。**この 2 つを 1 本にしない** |
 | `actor-manifest.jsonld` | actor 宣言。3 pipeline（cron×2 / xrpc×1）、6 capability、3 requiredLoop |
 | `.well-known/did.json` | DID document。**配信されていない**（Pages 無効）し、live 文書とも中身が違う |
 | `docs/identity-claims.edn` | 下の表の**実測値を固定したもの**。test の期待値 |
-| `test/` | gate（緩む方向 / きつくなる方向の両方）・descriptor 本体・network 実測 |
+| `test/` | gate（緩む方向 / きつくなる方向の両方）・descriptor 本体・executor・network 実測 |
 | `run_tests.cljs` | 上記の runner。nbb + `cljs.test` |
 | `CLAUDE.md` | **ここに無い実行系の説明**。上記の断り書きを読むこと |
 | `MIGRATION-TODO.md` / `NOTICE` / `.nojekyll` | 未着手の codemod / 出所・ライセンス / Pages の残骸 |

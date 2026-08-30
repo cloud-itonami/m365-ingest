@@ -5,8 +5,10 @@
 「起動する」ことではなく、**名乗っていることが今も本当かを確かめる**ことである。
 所要 1〜2 分（`--network` を含めて 3 分）。
 
-必要なもの: `nbb`（ClojureScript on Node）と `curl`。**この repo に依存パッケージは
-無い** —— `deps.edn` も `package.json` も持たないので、install する物は何も無い。
+必要なもの: `nbb`（ClojureScript on Node）と `curl`。**install する物は無い** ——
+`deps.edn` も `package.json` も持たない。ただし 2026-08-30 の executor 以降、
+classpath に **兄弟 repo 2 本の `src`** が要る（`kotoba-lang/importer` と、その依存の
+`kotoba-lang/connector`）。west の checkout なら下記の相対パスでそのまま通る。
 
 ## 1. 取得する
 
@@ -22,13 +24,13 @@ west 経由の checkout で `git fetch origin` は通らない。
 ## 2. 構造・gate・固定値を検査する（network 不要）
 
 ```bash
-nbb --classpath src:test run_tests.cljs
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs
 ```
 
 期待される最後の 3 行:
 
 ```
-Ran 48 tests containing 231 assertions.
+Ran 65 tests containing 292 assertions.
 0 failures, 0 errors.
 
 mode: offline
@@ -48,6 +50,12 @@ m365-ingest actor: all green
   あること、`did.json` の `service[].id` が自分の DID の fragment であること
 - **固定値** — cell 9 / gate 7 / pipeline 3 / capability 6 などの census が実体と一致。
   count は**両方向に**落ちる（増えても減っても赤）
+- **executor が gate より先に走らないこと** — attest が 1 本でも欠ければ
+  `run/step` は effect 0 本・`:unmeasured` を返す（`:synced` の 0 件ではない）。
+  取り込んだ message が `actorDid` / `constitutionalStatus` を名乗っていても、
+  gate の出力の中でそれを騙れないこと（canonical record は `:imported` の 1 段下）
+- **sink が半分しか書かなかったページで cursor が動かないこと** —— 動けば
+  残りは次の delta に現れず、以後の run はすべて緑のまま穴が残る
 - **`docs/identity-claims.edn` の `:resolves-to` が解決規則から導けること** ——
   手書きの URL は「存在しない URL を測って 404 だと報告する」ので、`didweb` の
   規則から導出して突き合わせる
@@ -55,10 +63,10 @@ m365-ingest actor: all green
 ## 3. 名乗りを実際に解決しに行く
 
 ```bash
-nbb --classpath src:test run_tests.cljs --network
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs --network
 ```
 
-`Ran 48 tests containing 255 assertions.` / `mode: offline + network` になる
+`Ran 65 tests containing 316 assertions.` / `mode: offline + network` になる
 （増えた 24 assertion が実測ぶん）。curl で各 DID / 配信面を引き、
 `docs/identity-claims.edn` の `:measured` と突き合わせる。
 
