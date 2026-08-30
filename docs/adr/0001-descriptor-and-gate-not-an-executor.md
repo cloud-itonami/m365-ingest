@@ -63,6 +63,34 @@ cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorep
   例えば Graph client が後から追加されても、README が「無い」と書き続けることは
   できてしまう。これは残った穴として認めておく。
 
+## 改訂 2026-08-30 — executor は入った。gate が先であることは変わらない
+
+`kotoba-lang/importer` を kernel として、`src/m365_ingest/{source,graph,run}.cljc` が
+入った。**このタイトルは半分が古くなった** —— この repo はもう executor を持つ。
+
+古くならなかった方が、この ADR が実際に守っていたものである:
+
+- **判断は今も `murakumo.cljc` だけにある。** `run/step` は `cell-plan` を先に呼び、
+  `:blocked` なら effect 0 本・`:unmeasured` を返す。gate を迂回する経路は増えていない。
+- **credential に到達する経路は今も 1 本も無い。** `graph.cljc` は request map を
+  返し response map を受けるだけで、送るのは host である。
+- **書き込む主体は今もここに居ない。** `run/step` が返すのは effect の列で、
+  `run/land` は sink 自身の報告を受けて初めて cursor を動かす。
+
+`CLAUDE.md` が記述している T1 実行系（OAuth・token キャッシュ・`*/15` の cron・
+`wrangler secret`）は**依然として存在しない**ので、上の断り書きはそのまま有効である。
+入ったのは「Graph の応答をどう読み、どの順で cursor を動かすか」であって、
+「Graph を叩く主体」ではない。
+
+そして本 ADR が最後に残した穴 ——
+
+> 例えば Graph client が後から追加されても、README が「無い」と書き続けることは
+> できてしまう。これは残った穴として認めておく。
+
+—— は、まさにこの改訂で踏まれた。README の表と冒頭の断り書きは同じ commit で
+実体に合わせてある。**穴は塞がっていない**（次に何かが足されたとき、また人が
+README を直すしかない）が、少なくとも一度目は落ちなかった側で通っている。
+
 ## 関連
 
 - `docs/identity-claims.edn` — 実測値の正本
