@@ -19,7 +19,7 @@
    **410 は crash ではない。** `resyncRequired` は cursor が失効したという
    provider からの正常な返答で、source が `:resync-on` で名前を挙げてある。
    例外にすると、計画された経路が事故として記録される。"
-  (:require [kotoba.lang.text :as str]
+  (:require [clojure.string :as str]
             [importer.normalize :as n]
             [importer.plan :as plan]))
 
