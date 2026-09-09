@@ -12,7 +12,7 @@
    共有ライブラリに切り出していないのは、`.well-known` の非対称という
    仕様の一点だけを持つ 40 行で、依存を 1 本増やす方が高くつくため。
    3 つ目の repo が要るようになったら抽出する。"
-  (:require [kotoba.lang.text :as str]))
+  (:require [clojure.string :as str]))
 
 (defn did->document-url
   "did:web の DID から、DID document が置かれているべき URL を導く。
