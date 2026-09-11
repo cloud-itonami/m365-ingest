@@ -1,5 +1,5 @@
 (ns m365_ingest.gate-test
-  "`src/m365_ingest/murakumo.cljc` の **deny-by-default gate** を固定する。
+  "`src/m365_ingest/murakumo.cljk` の **deny-by-default gate** を固定する。
 
    この repo で唯一 substrate と呼べるのはこの gate で、`cell-plan` は
    『required-gates が全て attest されていなければ `:status :blocked` にして

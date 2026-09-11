@@ -12,7 +12,7 @@
 | | ここにあるか |
 |---|---|
 | actor が**何を名乗り、何を要求し、どの pipeline を持つと宣言しているか** | **ある**（`actor-manifest.jsonld` / `.well-known/did.json`） |
-| **gate**（attestation が揃わなければ effect を 1 つも出さない判断） | **ある**（`src/m365_ingest/murakumo.cljc`、130 行） |
+| **gate**（attestation が揃わなければ effect を 1 つも出さない判断） | **ある**（`src/m365_ingest/murakumo.cljk`、130 行） |
 | **Graph の delta 応答を canonical record に翻訳し、gate を通して effect を並べる executor** | **ある**（2026-08-30 追加。`src/m365_ingest/{source,graph,run}.cljc`） |
 | OAuth・token 取得・HTTP を送る主体・Worker・cron・sink | **無い** |
 
@@ -43,8 +43,8 @@ descriptor だけを写した snapshot で、codemod は未着手（`MIGRATION-T
 散文ではなく実行で確かめられる。
 
 ```bash
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs             # 構造・gate・executor・固定値（network 不要）
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs --network   # 上記 + 名乗りを実際に解決しに行く
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk             # 構造・gate・executor・固定値（network 不要）
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk --network   # 上記 + 名乗りを実際に解決しに行く
 ```
 
 どちらも 65 tests、`--network` 無しで 292 assertions・有りで 316 assertions。最後に
@@ -52,7 +52,7 @@ nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connec
 [docs/operator-quickstart.md](docs/operator-quickstart.md)。
 
 **この README 自身も検査対象である。** 下に書いてある数（cell 9 / gate 7 / 交差 0）と
-2 つの DID は `test/m365_ingest/docs_test.cljs` が実体と突き合わせるので、実体が動けば
+2 つの DID は `test/m365_ingest/docs_test.cljk` が実体と突き合わせるので、実体が動けば
 README が赤くなる。quickstart が名指しする `.cljs` の実在も同じ場所で守っている ——
 **踏めない手順を書けない**ようにするため。
 
@@ -60,15 +60,15 @@ README が赤くなる。quickstart が名指しする `.cljs` の実在も同�
 
 | ファイル | 役割 |
 |---|---|
-| `src/m365_ingest/murakumo.cljc` | **判断はここだけ。** 9 cell × 7 gate の deny-by-default |
-| `src/m365_ingest/source.cljc` | 何を追うかの宣言（cursor の種類・失効条件・governance）。`importer.model` が検査する |
-| `src/m365_ingest/graph.cljc` | Graph の応答 → provider に依らない page。純関数、credential 無し |
-| `src/m365_ingest/run.cljc` | gate → effect（`step`）と、sink の報告 → cursor（`land`）。**この 2 つを 1 本にしない** |
+| `src/m365_ingest/murakumo.cljk` | **判断はここだけ。** 9 cell × 7 gate の deny-by-default |
+| `src/m365_ingest/source.cljk` | 何を追うかの宣言（cursor の種類・失効条件・governance）。`importer.model` が検査する |
+| `src/m365_ingest/graph.cljk` | Graph の応答 → provider に依らない page。純関数、credential 無し |
+| `src/m365_ingest/run.cljk` | gate → effect（`step`）と、sink の報告 → cursor（`land`）。**この 2 つを 1 本にしない** |
 | `actor-manifest.jsonld` | actor 宣言。3 pipeline（cron×2 / xrpc×1）、6 capability、3 requiredLoop |
 | `.well-known/did.json` | DID document。**配信されていない**（Pages 無効）し、live 文書とも中身が違う |
 | `docs/identity-claims.edn` | 下の表の**実測値を固定したもの**。test の期待値 |
 | `test/` | gate（緩む方向 / きつくなる方向の両方）・descriptor 本体・executor・network 実測 |
-| `run_tests.cljs` | 上記の runner。nbb + `cljs.test` |
+| `run_tests.cljk` | 上記の runner。nbb + `cljs.test` |
 | `CLAUDE.md` | **ここに無い実行系の説明**。上記の断り書きを読むこと |
 | `MIGRATION-TODO.md` / `NOTICE` / `.nojekyll` | 未着手の codemod / 出所・ライセンス / Pages の残骸 |
 

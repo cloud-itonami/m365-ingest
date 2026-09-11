@@ -24,7 +24,7 @@ west 経由の checkout で `git fetch origin` は通らない。
 ## 2. 構造・gate・固定値を検査する（network 不要）
 
 ```bash
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk
 ```
 
 期待される最後の 3 行:
@@ -63,7 +63,7 @@ m365-ingest actor: all green
 ## 3. 名乗りを実際に解決しに行く
 
 ```bash
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljs --network
+nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk --network
 ```
 
 `Ran 65 tests containing 316 assertions.` / `mode: offline + network` になる
@@ -87,7 +87,7 @@ nbb scripts/maturity-loop/run.cljs --only m365-ingest
 期待は `噛む=24 噛まない=0 エラー=0 skip=0`。使い捨て worktree を west の pin から
 切って 24 通りに壊すので、**共有 checkout には触れない**。うち 8 通りは
 **この文書と README と ADR を壊す** —— 手順・数・断り書きが実体から離れたら
-赤くなる（`test/m365_ingest/docs_test.cljs`）。`噛まない` が 1 つでも
+赤くなる（`test/m365_ingest/docs_test.cljk`）。`噛まない` が 1 つでも
 出たら、それは「そのテストはその不変条件を守っていない」という具体的な TODO である。
 
 ## 5. gate を手で撃ってみる（任意・5 秒）
