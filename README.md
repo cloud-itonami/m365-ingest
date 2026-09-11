@@ -43,8 +43,8 @@ descriptor だけを写した snapshot で、codemod は未着手（`MIGRATION-T
 散文ではなく実行で確かめられる。
 
 ```bash
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk             # 構造・gate・executor・固定値（network 不要）
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk --network   # 上記 + 名乗りを実際に解決しに行く
+kbb --backend sci --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk             # 構造・gate・executor・固定値（network 不要）
+kbb --backend sci --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk --network   # 上記 + 名乗りを実際に解決しに行く
 ```
 
 どちらも 65 tests、`--network` 無しで 292 assertions・有りで 316 assertions。最後に

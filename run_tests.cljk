@@ -1,8 +1,8 @@
-#!/usr/bin/env nbb
+#!/usr/bin/env kbb
 ;; run_tests.cljk — m365-ingest actor の検査。
 ;;
-;;   nbb --classpath src:test run_tests.cljk             gate + 構造 + 固定値（network 不要）
-;;   nbb --classpath src:test run_tests.cljk --network   claims の測定値を実際に取りに行く
+;;   kbb --backend sci --classpath src:test run_tests.cljk             gate + 構造 + 固定値（network 不要）
+;;   kbb --backend sci --classpath src:test run_tests.cljk --network   claims の測定値を実際に取りに行く
 ;;
 ;; この repo は 2026-06 の snapshot 以来 **テストを 1 本も持っていなかった**。
 ;; 2026-07-18 の rescue commit で入った `src/m365_ingest/murakumo.cljk` は
