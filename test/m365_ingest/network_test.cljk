@@ -1,7 +1,7 @@
 (ns m365_ingest.network-test
   "docs/identity-claims.edn に固定した測定値を、**実際に取りに行って**照合する。
 
-   既定では走らない（`nbb run_tests.cljk --network` で有効）。network を要る検査を
+   既定では走らない（`kbb --backend sci run_tests.cljk --network` で有効）。network を要る検査を
    既定にすると、回線が落ちているだけで赤くなり、赤の意味が薄まる。
    一方これを持たないと、claims は『誰も確かめていない散文』に戻る ——
    だから消さずに、明示的に呼べる場所に置く。

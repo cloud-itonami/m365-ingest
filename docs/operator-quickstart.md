@@ -24,7 +24,7 @@ west 経由の checkout で `git fetch origin` は通らない。
 ## 2. 構造・gate・固定値を検査する（network 不要）
 
 ```bash
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk
+kbb --backend sci --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk
 ```
 
 期待される最後の 3 行:
@@ -63,7 +63,7 @@ m365-ingest actor: all green
 ## 3. 名乗りを実際に解決しに行く
 
 ```bash
-nbb --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk --network
+kbb --backend sci --classpath src:test:../../kotoba-lang/importer/src:../../kotoba-lang/connector/src run_tests.cljk --network
 ```
 
 `Ran 65 tests containing 316 assertions.` / `mode: offline + network` になる
@@ -81,7 +81,7 @@ superproject 側の mutation runner が、**壊して赤くなること**を確�
 
 ```bash
 cd <superproject root>
-nbb scripts/maturity-loop/run.cljs --only m365-ingest
+kbb --backend sci scripts/maturity-loop/run.cljk --only m365-ingest
 ```
 
 期待は `噛む=24 噛まない=0 エラー=0 skip=0`。使い捨て worktree を west の pin から
@@ -93,7 +93,7 @@ nbb scripts/maturity-loop/run.cljs --only m365-ingest
 ## 5. gate を手で撃ってみる（任意・5 秒）
 
 ```bash
-nbb --classpath src -e '(require (quote [m365_ingest.murakumo :as m]))
+kbb --backend sci --classpath src -e '(require (quote [m365_ingest.murakumo :as m]))
   (let [blocked (m/cell-plan :shinka {:attestations {}})
         ready   (m/cell-plan :shinka {:attestations (into #{} m/common-gates) :request-id "req-1"})]
     (println "blocked:" (:status blocked) "effects" (count (:effects blocked)) "missing" (count (:missing-gates blocked)))
