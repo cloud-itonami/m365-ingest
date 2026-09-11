@@ -31,7 +31,7 @@
  ;; （この repo の GitHub Pages は無効。下記 :publication）。
  :claims
  [{:id          :did/substrate
-   :source      "src/m365_ingest/murakumo.cljc → actor-did"
+   :source      "src/m365_ingest/murakumo.cljk → actor-did"
    :did         "did:web:m365-ingest.etzhayyim.com"
    ;; did:web 解決規則（W3C did:web）: method-specific id の ':' を '/' にして
    ;; https:// を付ける。path 成分が無い場合だけ /.well-known/ を挟む。
@@ -175,13 +175,13 @@
  ;; 『測り直して claims を更新しろ』と言う。
  :gaps
  [{:id :rkey/reserved-passthrough
-   :where "src/m365_ingest/murakumo.cljc → safe-rkey"
+   :where "src/m365_ingest/murakumo.cljk → safe-rkey"
    :what "AT Protocol が予約する rkey `.` と `..` を素通しする。
           安全文字集合に `.` が入っているため、`.` は `.` のまま残る。"
    :measured {:dot "." :dotdot ".."}}
 
   {:id :record/caller-can-forge-actor-did
-   :where "src/m365_ingest/murakumo.cljc → records-for"
+   :where "src/m365_ingest/murakumo.cljk → records-for"
    :what "**effect の :actor は actor-did に固定されるが、record 本体の
           :actorDid は呼び出し側が上書きできる。** base map が入力 record より
           先に merge されるため、入力に :actorDid があればそれが勝つ。
@@ -192,7 +192,7 @@
               :record-constitutional-status-when-caller-supplies-one "forged"}}
 
   {:id :ns/underscore
-   :where "src/m365_ingest/murakumo.cljc → ns 宣言"
+   :where "src/m365_ingest/murakumo.cljk → ns 宣言"
    :what "ns 名が `m365_ingest.murakumo` とアンダースコアで書かれている
           （慣用形は `m365-ingest.murakumo`、ファイル経路だけが underscore）。
           path が偶然一致するので load は通る。兄弟 jp-ashiba-actor も同形なので

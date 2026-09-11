@@ -75,7 +75,7 @@
 ;; ── 1. 手順が踏めること ─────────────────────────────────────────────────────
 
 (defn- referenced-scripts
-  "文書が名指しする `.cljs` path。`nbb --classpath src:test run_tests.cljs` のような
+  "文書が名指しする `.cljs` path。`nbb --classpath src:test run_tests.cljk` のような
    行から拾う。裸の語も拾うので、拡張子を持つ token だけを見る。"
   [text]
   (->> (re-seq #"[A-Za-z0-9_./-]+\.cljs" text)

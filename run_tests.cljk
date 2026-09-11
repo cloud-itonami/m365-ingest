@@ -1,11 +1,11 @@
 #!/usr/bin/env nbb
-;; run_tests.cljs — m365-ingest actor の検査。
+;; run_tests.cljk — m365-ingest actor の検査。
 ;;
-;;   nbb --classpath src:test run_tests.cljs             gate + 構造 + 固定値（network 不要）
-;;   nbb --classpath src:test run_tests.cljs --network   claims の測定値を実際に取りに行く
+;;   nbb --classpath src:test run_tests.cljk             gate + 構造 + 固定値（network 不要）
+;;   nbb --classpath src:test run_tests.cljk --network   claims の測定値を実際に取りに行く
 ;;
 ;; この repo は 2026-06 の snapshot 以来 **テストを 1 本も持っていなかった**。
-;; 2026-07-18 の rescue commit で入った `src/m365_ingest/murakumo.cljc` は
+;; 2026-07-18 の rescue commit で入った `src/m365_ingest/murakumo.cljk` は
 ;; deny-by-default の gate（required-gates が揃わなければ effect を出さない）を
 ;; 持つのに、それが緩んでも誰も気づかない状態が既定だった。
 ;;

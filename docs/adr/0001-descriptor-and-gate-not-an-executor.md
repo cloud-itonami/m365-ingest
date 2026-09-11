@@ -11,7 +11,7 @@
 記述しており、読んだ者は「収集が動いている repo」だと受け取る。
 
 **その実装はここに存在しない。** この repo の全ファイルは 10 個ほどで、コードは
-`src/m365_ingest/murakumo.cljc`（130 行）1 本だけ。Graph client も OAuth も Worker も
+`src/m365_ingest/murakumo.cljk`（130 行）1 本だけ。Graph client も OAuth も Worker も
 cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorepo の
 `20-actors/m365-ingest` から descriptor だけを写した際に一緒に来た文書で、
 `MIGRATION-TODO.md` の 6 項目（3rd-party SDK の置換・DID bind 等）は今日まで全部
@@ -56,7 +56,7 @@ cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorep
   溶かし方が起きない。
 - **文書が黙って古くなる経路が減る。** README が主張する構造（cell 9 / gate 7 /
   交差 0 / 2 つの DID）と、quickstart が名指しする script の実在・引用する
-  `Ran N tests` は `test/m365_ingest/docs_test.cljs` が実体と突き合わせる。
+  `Ran N tests` は `test/m365_ingest/docs_test.cljk` が実体と突き合わせる。
   **踏めない手順を書けない。**
 - 一方で **README の散文そのものは機械検査されない。** 数値と DID と境界宣言の
   存在は test が守るが、「何が無いか」を*正しく*述べているかは人が守る。
