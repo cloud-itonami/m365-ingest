@@ -70,15 +70,15 @@
    実在検査からは外れる —— 代わりに『どこに在るのか』を人が明示する義務を負う。
    増やすときは、その step が superproject 側であることを quickstart 本文でも
    言うこと（`cd <superproject root>` のような文脈なしに置かない）。"
-  #{"scripts/maturity-loop/run.cljs"})
+  #{"scripts/maturity-loop/run.cljk"})
 
 ;; ── 1. 手順が踏めること ─────────────────────────────────────────────────────
 
 (defn- referenced-scripts
-  "文書が名指しする `.cljs` path。`kbb --backend sci --classpath src:test run_tests.cljk` のような
+  "文書が名指しする `.cljk` path。`kbb --backend sci --classpath src:test run_tests.cljk` のような
    行から拾う。裸の語も拾うので、拡張子を持つ token だけを見る。"
   [text]
-  (->> (re-seq #"[A-Za-z0-9_./-]+\.cljs" text)
+  (->> (re-seq #"[A-Za-z0-9_./-]+\.clj[ks]" text)
        distinct
        (remove #(str/starts-with? % "test/"))   ; ns 名の説明で出てくる自分自身
        set))
@@ -120,7 +120,7 @@
    （数える道具が自分を数える形は、静かにずれるので気づきにくい）。"
   []
   (->> (fs/readdirSync "test/m365_ingest")
-       (filter #(re-find #"\.clj[cs]$" %))
+       (filter #(re-find #"\.clj[csk]$" %))
        (map #(str "test/m365_ingest/" %))
        (map slurp*)
        (map #(count (re-seq #"(?m)^\(deftest " %)))
