@@ -8,7 +8,7 @@
    network は要らない。Graph の応答は値として渡すので、確かめられるのは
    『どの request を組んだか』『その応答をどう読んだか』であり、どちらも
    ただの値の比較である。"
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [importer.cursor :as cursor]
             [importer.model :as im]
             [importer.plan :as plan]

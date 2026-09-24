@@ -16,7 +16,7 @@
   (:require [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [m365_ingest.didweb :as didweb]
             [m365_ingest.murakumo :as m]
             ["node:fs" :as fs]))
