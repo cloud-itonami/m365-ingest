@@ -13,7 +13,7 @@
    だからここでは実ファイルを読み、**数を pin して両方向に落とす**。
    pin が古くなったときの正しい対応は pin を戻すことではなく、
    測り直して docs/identity-claims.edn を更新することである。"
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as str]
             [kotoba.test :refer [deftest is testing]]
