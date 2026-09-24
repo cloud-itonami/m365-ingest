@@ -28,7 +28,7 @@
       止めている。黙って外せないようにする。
 
    赤くなったときの意味は『戻せ』ではなく『文書を実体に合わせろ』である。"
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [clojure.string :as str]
             [kotoba.test :refer [deftest is testing]]
             [m365_ingest.murakumo :as m]
