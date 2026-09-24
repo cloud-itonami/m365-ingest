@@ -24,7 +24,7 @@
    どちらも壊れ方が静かなので、fixture で撃って赤くなることを確かめてある
    （`scripts/maturity-loop/mutations.edn` の :m365-ingest/*）。"
   (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [m365_ingest.murakumo :as m]))
 
 (def all-attested

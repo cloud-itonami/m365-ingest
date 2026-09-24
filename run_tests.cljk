@@ -16,7 +16,7 @@
 ;; workspace の規則（superproject CLAUDE.md）で script host は nbb に一本化されて
 ;; おり、新規の .ts / .mjs / .sh は禁止。よって runner は nbb + cljs.test である。
 (ns run-tests
-  (:require [clojure.test :as t]
+  (:require [kotoba.test :as t]
             [m365_ingest.gate-test]
             [m365_ingest.repo-test]
             [m365_ingest.docs-test]
