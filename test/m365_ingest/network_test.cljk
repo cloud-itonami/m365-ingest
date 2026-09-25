@@ -8,7 +8,7 @@
 
    curl を使うのは、claims の :measured-how がまさに curl の invocation だから。
    同じ道具で測って同じ道具で照合する。"
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [kotoba.test :refer [deftest is testing]]
             [cljs.reader :as reader]
             [m365_ingest.didweb :as didweb]
