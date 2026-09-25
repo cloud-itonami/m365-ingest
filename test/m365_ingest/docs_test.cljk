@@ -29,7 +29,7 @@
 
    赤くなったときの意味は『戻せ』ではなく『文書を実体に合わせろ』である。"
   (:require [kotoba.lang.edn :as edn]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kotoba.test :refer [deftest is testing]]
             [m365_ingest.murakumo :as m]
             ["node:fs" :as fs]))
