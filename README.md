@@ -27,15 +27,15 @@ executor が足したのは判断ではなく順序である: `run/step` が eff
 すると「書く前に cursor を進める」が書けてしまい、それは次の delta が二度と触れない
 恒久的で静かな穴になる（`kotoba-lang/importer` の `cursor/advance` が拒む形）。
 
-## `CLAUDE.md` はここに無いものを説明している
+## `AGENTS.md` はここに無いものを説明している
 
-`CLAUDE.md` は T1 実行系（Graph API のページング・token キャッシュ・`*/15` の delta
+`AGENTS.md` は T1 実行系（Graph API のページング・token キャッシュ・`*/15` の delta
 sync・`wrangler secret M365_CLIENT_SECRET`）を書いているが、**その実装はこの repo に
 存在しない**。2026-05-21 に etzhayyim monorepo の `20-actors/m365-ingest` から
 descriptor だけを写した snapshot で、codemod は未着手（`MIGRATION-TODO.md` の 6 項目は
 全部 `[ ]` のまま。この数は test で固定してある）。
 
-**`CLAUDE.md` の手順を実行しない。** `cd` する先も `wrangler` の対象もここには無い。
+**`AGENTS.md` の手順を実行しない。** `cd` する先も `wrangler` の対象もここには無い。
 経緯は [docs/adr/0001](docs/adr/0001-descriptor-and-gate-not-an-executor.md)。
 
 ## 確かめる
@@ -69,7 +69,7 @@ README が赤くなる。quickstart が名指しする `.cljs` の実在も同�
 | `docs/identity-claims.edn` | 下の表の**実測値を固定したもの**。test の期待値 |
 | `test/` | gate（緩む方向 / きつくなる方向の両方）・descriptor 本体・executor・network 実測 |
 | `run_tests.cljk` | 上記の runner。nbb + `cljs.test` |
-| `CLAUDE.md` | **ここに無い実行系の説明**。上記の断り書きを読むこと |
+| `AGENTS.md` | **ここに無い実行系の説明**。上記の断り書きを読むこと |
 | `MIGRATION-TODO.md` / `NOTICE` / `.nojekyll` | 未着手の codemod / 出所・ライセンス / Pages の残骸 |
 
 ## gate が守っているもの

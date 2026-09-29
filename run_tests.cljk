@@ -13,7 +13,7 @@
 ;; scan が測っていた tree には src/ が無かった —— axis-substrate=0 は
 ;; 『コードが無い』ではなく『pin が古くて見えていない』の意味だった。
 ;;
-;; workspace の規則（superproject CLAUDE.md）で script host は nbb に一本化されて
+;; workspace の規則（superproject AGENTS.md）で script host は nbb に一本化されて
 ;; おり、新規の .ts / .mjs / .sh は禁止。よって runner は nbb + cljs.test である。
 (ns run-tests
   (:require [kotoba.test :as t]

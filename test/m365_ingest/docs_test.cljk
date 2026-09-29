@@ -23,7 +23,7 @@
    2. **数が実体と合うこと** — README / quickstart が引用する cell 数・gate 数・
       deftest 数は、実体および `docs/identity-claims.edn` の census と一致する。
       **両方向に落ちる**（増えても減っても赤）。
-   3. **境界の宣言が消えないこと** — 『CLAUDE.md はここに無い実行系の説明であり、
+   3. **境界の宣言が消えないこと** — 『AGENTS.md はここに無い実行系の説明であり、
       その手順を実行しない』という断り書きは、この repo で最も高くつく誤読を
       止めている。黙って外せないようにする。
 
@@ -165,13 +165,13 @@
 ;; ── 3. 境界の宣言が消えないこと ─────────────────────────────────────────────
 
 (deftest the-readme-and-the-quickstart-both-say-claude-md-describes-code-that-is-absent
-  "**この repo で最も高くつく誤読を止めている 1 文。** CLAUDE.md は T1 実行系を
+  "**この repo で最も高くつく誤読を止めている 1 文。** AGENTS.md は T1 実行系を
    詳細に書いており、実装が在るように読める。断り書きが片方から消えると、
    もう片方だけを読んだ人が `wrangler` を叩きに行く。両方で守る。"
   (doseq [[label text] [["README" readme] ["quickstart" quickstart]]]
     (testing label
-      (is (= [] (missing-phrases text ["CLAUDE.md"]))
-          (str label " が CLAUDE.md に触れていない")))))
+      (is (= [] (missing-phrases text ["AGENTS.md"]))
+          (str label " が AGENTS.md に触れていない")))))
 
 (deftest the-quickstart-keeps-a-do-not-do-section
   "『やらないこと』は、この repo では飾りではない —— did.json を編集して直った

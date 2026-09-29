@@ -6,13 +6,13 @@
 ## 文脈
 
 `m365-ingest` という名前は主題（Microsoft 365 の取り込み）を言うが、**この repo が
-何であるか**は言わない。実際、`CLAUDE.md` は 15 分ごとの delta sync・Graph API の
+何であるか**は言わない。実際、`AGENTS.md` は 15 分ごとの delta sync・Graph API の
 ページング・token キャッシュ・`wrangler secret M365_CLIENT_SECRET` を持つ T1 実行系を
 記述しており、読んだ者は「収集が動いている repo」だと受け取る。
 
 **その実装はここに存在しない。** この repo の全ファイルは 10 個ほどで、コードは
 `src/m365_ingest/murakumo.cljk`（130 行）1 本だけ。Graph client も OAuth も Worker も
-cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorepo の
+cron の実行主体も無い。`AGENTS.md` は 2026-05-21 に etzhayyim monorepo の
 `20-actors/m365-ingest` から descriptor だけを写した際に一緒に来た文書で、
 `MIGRATION-TODO.md` の 6 項目（3rd-party SDK の置換・DID bind 等）は今日まで全部
 `[ ]` のままである。
@@ -30,7 +30,7 @@ cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorep
 1. **`README.md` の冒頭で名乗る。** 何がここに有り（descriptor / gate）、何が無いか
    （Graph client / OAuth / Worker / 実行主体）を表で先に出す。superproject の規則
    「名前が機能を示さない repo は README の冒頭で名乗る」の適用。
-2. **`CLAUDE.md` は削除も改稿もしない。** あれは移行元の実行系の仕様として価値がある。
+2. **`AGENTS.md` は削除も改稿もしない。** あれは移行元の実行系の仕様として価値がある。
    代わりに README と quickstart が「ここに無いものの説明である」と明示し、
    **手順を実行しないこと**を「やらないこと」として書く。
 3. **operator の仕事を「起動」ではなく「確かめる」と定義する。**
@@ -39,7 +39,7 @@ cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorep
    `{:op :mst/put-record ...}` という data であり、実行する者はこの repo に居ない。
    quickstart の step 5 でそれを目で見せる。
 
-## なぜ `CLAUDE.md` を直さないのか
+## なぜ `AGENTS.md` を直さないのか
 
 直す先が無いからである。あの文書が記述する executor は「まだ書かれていない」のか
 「別 repo に在る」のか、この repo からは決められない（`complianceDocs` が指す 2 件と
@@ -52,7 +52,7 @@ cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorep
 ## 帰結
 
 - 読み手は 3 行目までに「ここに収集は無い」を知る。
-- `CLAUDE.md` の手順を実行しようとして `cd` 先が無いことに気づく、という時間の
+- `AGENTS.md` の手順を実行しようとして `cd` 先が無いことに気づく、という時間の
   溶かし方が起きない。
 - **文書が黙って古くなる経路が減る。** README が主張する構造（cell 9 / gate 7 /
   交差 0 / 2 つの DID）と、quickstart が名指しする script の実在・引用する
@@ -77,7 +77,7 @@ cron の実行主体も無い。`CLAUDE.md` は 2026-05-21 に etzhayyim monorep
 - **書き込む主体は今もここに居ない。** `run/step` が返すのは effect の列で、
   `run/land` は sink 自身の報告を受けて初めて cursor を動かす。
 
-`CLAUDE.md` が記述している T1 実行系（OAuth・token キャッシュ・`*/15` の cron・
+`AGENTS.md` が記述している T1 実行系（OAuth・token キャッシュ・`*/15` の cron・
 `wrangler secret`）は**依然として存在しない**ので、上の断り書きはそのまま有効である。
 入ったのは「Graph の応答をどう読み、どの順で cursor を動かすか」であって、
 「Graph を叩く主体」ではない。
