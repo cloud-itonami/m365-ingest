@@ -121,7 +121,7 @@ data であって、それを実行する者はこの repo に居ない。
 
 ## やらないこと
 
-- **`CLAUDE.md` の手順を実行しない。** あれは T1 実行系（Graph API のページング・
+- **`AGENTS.md` の手順を実行しない。** あれは T1 実行系（Graph API のページング・
   `wrangler secret M365_CLIENT_SECRET`・`*/15` の delta sync）の説明で、**その実装は
   この repo に無い**。`cd` する先も deploy 対象も存在しない。
 - **`.well-known/did.json` を編集して「直った」としない。** このファイルは live DID
